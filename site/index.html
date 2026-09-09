@@ -384,8 +384,17 @@ async function setupNotifications(){
     btn.disabled = true;
     btn.textContent = 'Notifications on';
     msg.textContent = 'This device is subscribed.';
+    // Show the details again even on a later visit. Hiding them meant that
+    // subscribing without copying left no way to get them back short of
+    // clearing site data.
+    showSubscription(existing);
     return;
   }
+  function showSubscription(sub){
+    $('sub-json').value = JSON.stringify(sub);
+    $('sub-out').style.display = 'block';
+  }
+
   btn.onclick = async () => {
     btn.disabled = true; btn.textContent = 'Asking\u2026';
     let perm;
@@ -406,9 +415,7 @@ async function setupNotifications(){
       });
       btn.textContent = 'Notifications on';
       msg.textContent = 'This device is subscribed.';
-      $('sub-json').value = JSON.stringify(sub);
-      $('sub-out').style.display = 'block';
-      $('filters').open = true;
+      showSubscription(sub);
     } catch (err) {
       btn.textContent = 'Enable notifications'; btn.disabled = false;
       msg.textContent = 'Could not subscribe: ' + err.message;
