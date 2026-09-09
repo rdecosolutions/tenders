@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TN Tenders</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1b5e9c">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root{
     --bg:#f6f7f9; --panel:#fff; --ink:#15181d; --muted:#666e7a;
@@ -81,6 +84,16 @@
   code{background:var(--accent-soft);padding:1px 5px;border-radius:4px;
     font-size:12px}
 
+  .notif{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+  .notif button{width:100%;padding:9px;border-radius:7px;cursor:pointer;
+    border:1px solid var(--accent);background:var(--accent-soft);
+    color:var(--accent);font-size:13px;font-weight:600;font-family:inherit}
+  .notif button[disabled]{opacity:.55;cursor:default}
+  .notif p{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.45}
+  #sub-out{display:none;margin-top:10px}
+  #sub-out textarea{width:100%;height:88px;font-family:ui-monospace,Menlo,
+    monospace;font-size:10.5px;padding:7px;border-radius:6px;
+    border:1px solid var(--line);background:var(--bg);color:var(--ink)}
   .stale{background:#fff4e5;color:#8a5300;border:1px solid #f0d3a8;
     padding:9px 14px;border-radius:8px;margin-bottom:12px;font-size:13px}
   @media (prefers-color-scheme:dark){
@@ -128,6 +141,18 @@
     </label>
     <button class="clear" id="f-clear">Clear filters</button>
     </details>
+    <div class="notif">
+      <button id="notif-btn">Enable notifications</button>
+      <p id="notif-msg">Get a notification on this device when new tenders
+        appear.</p>
+      <div id="sub-out">
+        <p><strong>One last step.</strong> Copy this and send it to Kim to
+          add as a GitHub secret &mdash; only then will pushes reach this
+          device.</p>
+        <textarea id="sub-json" readonly></textarea>
+        <button id="sub-copy" style="margin-top:6px">Copy</button>
+      </div>
+    </div>
     <div class="note" id="alert-note" style="display:none">
       Changes the engine spotted, newest first. Refreshed nightly.
     </div>
@@ -334,6 +359,70 @@ function setView(v){
 $('t-tenders').onclick = () => setView('tenders');
 $('t-alerts').onclick = () => setView('alerts');
 if (window.matchMedia('(max-width:820px)').matches) $('filters').open = false;
+
+// ---- Web Push -----------------------------------------------------------
+// The public half of the signing key. Safe to publish: it only lets the
+// browser verify that a push really came from this app.
+const VAPID_PUBLIC = 'BJybbPFEsDvS4jyQqFpiXgJfBTTZv3OoYwfi0wDlteGAUEuhg-p1TpjyuT4yToZCYVohHYSXwr-emOTpWPt16xQ';
+
+function b64ToBytes(b64){
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+
+async function setupNotifications(){
+  const btn = $('notif-btn'), msg = $('notif-msg');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)){
+    btn.disabled = true;
+    msg.textContent = 'This browser does not support notifications.';
+    return;
+  }
+  const reg = await navigator.serviceWorker.register('sw.js');
+  const existing = await reg.pushManager.getSubscription();
+  if (existing && Notification.permission === 'granted'){
+    btn.disabled = true;
+    btn.textContent = 'Notifications on';
+    msg.textContent = 'This device is subscribed.';
+    return;
+  }
+  btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = 'Asking\u2026';
+    let perm;
+    try { perm = await Notification.requestPermission(); }
+    catch(_) { perm = 'denied'; }
+    if (perm !== 'granted'){
+      btn.textContent = 'Enable notifications'; btn.disabled = false;
+      // A blocked permission cannot be re-asked by script - say how to undo it.
+      msg.textContent = perm === 'denied'
+        ? 'Blocked. Allow notifications for this site in your browser settings, then reload.'
+        : 'Not enabled.';
+      return;
+    }
+    try {
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: b64ToBytes(VAPID_PUBLIC)
+      });
+      btn.textContent = 'Notifications on';
+      msg.textContent = 'This device is subscribed.';
+      $('sub-json').value = JSON.stringify(sub);
+      $('sub-out').style.display = 'block';
+      $('filters').open = true;
+    } catch (err) {
+      btn.textContent = 'Enable notifications'; btn.disabled = false;
+      msg.textContent = 'Could not subscribe: ' + err.message;
+    }
+  };
+  $('sub-copy').onclick = () => {
+    $('sub-json').select();
+    navigator.clipboard.writeText($('sub-json').value)
+      .then(() => { $('sub-copy').textContent = 'Copied'; })
+      .catch(() => { $('sub-copy').textContent = 'Press Cmd/Ctrl+C'; });
+  };
+}
+setupNotifications();
+
 boot();
 </script>
 </body>

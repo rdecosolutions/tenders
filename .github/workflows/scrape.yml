@@ -61,3 +61,26 @@ jobs:
         with:
           path: site
       - uses: actions/deploy-pages@v4
+
+      # Notifications run LAST and can never fail the job: by this point the
+      # data is committed and the site is published, which is the part that
+      # matters. A push service having a bad night must not look like a
+      # broken scrape.
+      - name: Notify subscribed devices
+        if: always()
+        continue-on-error: true
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+          VAPID_SUBJECT: mailto:kim@piperocket.digital
+          SITE_URL: https://tenders.rdecosolutions.org/
+        run: |
+          if [ -z "$VAPID_PRIVATE_KEY" ]; then
+            echo "No VAPID key configured yet - skipping notifications."
+            exit 0
+          fi
+          pip install --quiet pywebpush
+          # The signing key only ever exists on disk inside this run.
+          printf '%s' "$VAPID_PRIVATE_KEY" > vapid_private_key.pem
+          python3 engine/notify.py || true
+          rm -f vapid_private_key.pem

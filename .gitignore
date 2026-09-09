@@ -25,3 +25,7 @@ config.txt
 __pycache__/
 *.pyc
 .DS_Store
+
+# Web Push signing key — NEVER commit this.
+vapid_private_key.pem
+vapid_public_key.txt
