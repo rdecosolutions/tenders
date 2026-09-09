@@ -82,6 +82,30 @@ python3 -c "import sys; sys.path.insert(0,'engine'); import store; \
 originally, and it meant every improvement to the keyword lists re-tagged
 old tenders and fired a fake "corrected" alert for each one.
 
+## How this is hosted (decided 09-Sep-2026)
+Free, entirely on GitHub — no server:
+  - **GitHub Actions** runs `engine/main.py` nightly (21:00 UTC = 02:30 IST).
+  - **The repo is the database.** Actions runners are ephemeral, but change
+    detection needs yesterday's state, so `engine/export.py` dumps the
+    tables to sorted NDJSON in `data/`, which is committed. Each run does
+    restore -> scrape -> dump -> commit. NDJSON not the .db file, because
+    git diffs text cheaply and would otherwise store a fresh ~2 MB binary
+    every night.
+  - **GitHub Pages** serves `site/`, which is static: `site/index.html`
+    loads `site/data.json` (~300 KB gzipped) and filters in the browser.
+    `data.json` is BUILT by the workflow, not committed.
+  - Live at **tenders.rdecosolutions.org** (CNAME -> rdecosolutions.github.io).
+
+This is why the repo is public: Pages on a private repo needs a paid plan,
+and at that price a VPS is better value. `deploy/` still holds a complete
+VPS kit if that trade ever changes — the engine is identical either way.
+
+Consequence: **no Web Push.** A static site has nowhere to send from.
+Email digests from Actions are the realistic alert channel.
+
+`app/server.py` is now only for local development. The published site is
+`site/`. Change both if you change the tender card.
+
 ## Version control
 This is a git repo (branch `main`). `data/` is ignored — the database is
 accumulated state that lives on the server, and a laptop copy must never

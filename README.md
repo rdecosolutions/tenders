@@ -39,8 +39,17 @@ Two screens:
 - **Alerts** — the last 7 days of changes, badged new / corrected /
   retendered / extended / cancelled.
 
-## Running it on a server
-See `deploy/README.md`. Short version: a €4/mo Ubuntu box, `bash setup.sh
+## Where it runs
+Free on GitHub: Actions scrapes nightly and commits the data, Pages serves
+the static site at **tenders.rdecosolutions.org**. See `.github/workflows/`.
+Nothing to pay for and no server to look after.
+
+`app/server.py` is the local dev version (SQLite + a Python server);
+`site/` is what actually gets published (static, filters in the browser).
+
+## Running it on a server instead
+Only if you outgrow GitHub — e.g. you want push notifications, or a
+private repo. See `deploy/README.md`. Short version: a €4/mo Ubuntu box, `bash setup.sh
 <domain> <email>`, and the engine runs nightly at 02:30 behind HTTPS with a
 password. Needed before notifications can work at all — push cannot come
 from a sleeping laptop.

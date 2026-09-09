@@ -1,0 +1,40 @@
+name: Publish site
+
+# Rebuilds and republishes the site when the front-end changes, without
+# scraping. The nightly workflow publishes its own run, so this only needs
+# to cover hand edits to the page itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "engine/export.py"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build data.json from the committed data
+        run: |
+          python3 engine/export.py --restore
+          python3 engine/export.py --dump
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4

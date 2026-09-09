@@ -1,14 +1,22 @@
-# The database is accumulated state, not source code. It lives on the
-# server and is rebuilt by the engine — never commit it, and never let a
-# laptop copy overwrite the server's.
-data/*
-!data/.gitkeep
+# The SQLite database is a working file, rebuilt from the NDJSON below.
+# Never commit it: git stores a fresh ~2 MB copy of a binary every night,
+# whereas the sorted text version diffs to a few KB.
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/*.html
+data/*.png
+data/probe/
+
+# site/data.json is BUILT from the NDJSON by the Actions workflow, so it is
+# not source. site/index.html is.
+site/data.json
 
 # Scrape run logs
 logs/
 *.log
 
-# Secrets: Phase 4 (email/push) will put credentials here.
+# Secrets: Phase 4 (email alerts) will put credentials here.
 .env
 config.txt
 *.pem

@@ -1,0 +1,63 @@
+name: Nightly scrape
+
+# 02:30 IST = 21:00 UTC the previous day. GitHub cron is always UTC.
+# Note: scheduled runs on GitHub are best-effort and can start late when
+# their infrastructure is busy; that is fine for a once-a-day job.
+on:
+  schedule:
+    - cron: "0 21 * * *"
+  workflow_dispatch:          # lets you run it by hand from the Actions tab
+
+# Never let two scrapes overlap - two runs would hit the portal at once and
+# race each other committing the data files.
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+permissions:
+  contents: write             # to commit the refreshed data
+  pages: write                # to publish the site
+  id-token: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330      # a first backfill can take ~3h; normal runs ~30m
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright and Chromium
+        run: |
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Rebuild the database from the committed data
+        run: python3 engine/export.py --restore
+
+      - name: Scrape
+        run: python3 engine/main.py
+
+      - name: Write the data back out
+        run: python3 engine/export.py --dump
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name  "tn-tender-bot"
+          git config user.email "actions@github.com"
+          git add data/tenders.ndjson data/events.ndjson
+          if git diff --staged --quiet; then
+            echo "No change tonight - nothing to commit."
+          else
+            git commit -m "Nightly scrape: $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4

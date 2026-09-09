@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TN Tenders</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#fff; --ink:#15181d; --muted:#666e7a;
+    --line:#e2e5ea; --accent:#1b5e9c; --accent-soft:#e8f1fa;
+    --new:#0d7a4a; --corrected:#9a6100; --extended:#1b5e9c;
+    --retendered:#6b3fa0; --cancelled:#a32222;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#12151a; --panel:#191d24; --ink:#e9ecf1; --muted:#98a1ae;
+      --line:#2a3038; --accent:#6db3f2; --accent-soft:#1b2836;
+      --new:#4ec98a; --corrected:#e0a643; --extended:#6db3f2;
+      --retendered:#b18cf0; --cancelled:#f07373;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{background:var(--panel);border-bottom:1px solid var(--line);
+    padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    position:sticky;top:0;z-index:10}
+  h1{font-size:17px;margin:0;font-weight:640;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px}
+  .tabs{margin-left:auto;display:flex;gap:6px}
+  .tab{padding:7px 14px;border:1px solid var(--line);background:transparent;
+    color:var(--muted);border-radius:7px;cursor:pointer;font-size:13.5px;
+    font-weight:550}
+  .tab.on{background:var(--accent-soft);color:var(--accent);
+    border-color:var(--accent)}
+  .wrap{display:grid;grid-template-columns:266px 1fr;gap:20px;
+    padding:20px;align-items:start;max-width:1400px;margin:0 auto}
+  @media (max-width:820px){.wrap{grid-template-columns:1fr}}
+  .side{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:16px;position:sticky;top:76px}
+  .side summary{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--muted);cursor:pointer;list-style:none;font-weight:650;
+    display:flex;align-items:center;justify-content:space-between}
+  .side summary::-webkit-details-marker{display:none}
+  .side summary::after{content:'▾';transition:transform .15s}
+  .side details[open] summary::after{transform:rotate(180deg)}
+  .side details[open] summary{margin-bottom:6px}
+  label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 4px;
+    font-weight:550}
+  select,input{width:100%;padding:7px 9px;border:1px solid var(--line);
+    border-radius:7px;background:var(--bg);color:var(--ink);font-size:13.5px;
+    font-family:inherit}
+  .row2{display:flex;gap:8px}
+  button.clear{margin-top:16px;width:100%;padding:8px;border-radius:7px;
+    border:1px solid var(--line);background:transparent;color:var(--muted);
+    cursor:pointer;font-size:13px}
+  .count{color:var(--muted);font-size:13.5px;margin:0 0 12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:16px 18px;margin-bottom:11px}
+  .card h3{margin:0 0 10px;font-size:15.5px;line-height:1.4;font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
+  .chip{font-size:11.5px;padding:2.5px 9px;border-radius:99px;
+    background:var(--accent-soft);color:var(--accent);font-weight:550}
+  .chip.grey{background:transparent;border:1px solid var(--line);
+    color:var(--muted)}
+  dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+    gap:10px 18px;margin:0}
+  dt{font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--muted);margin-bottom:2px}
+  dd{margin:0;font-size:13.5px;word-break:break-word}
+  .soon{color:var(--cancelled);font-weight:600}
+  .badge{font-size:11px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;padding:3px 9px;border-radius:5px;color:#fff}
+  .badge.new{background:var(--new)} .badge.corrected{background:var(--corrected)}
+  .badge.extended{background:var(--extended)}
+  .badge.retendered{background:var(--retendered)}
+  .badge.cancelled{background:var(--cancelled)}
+  .empty{background:var(--panel);border:1px dashed var(--line);
+    border-radius:11px;padding:36px;text-align:center;color:var(--muted)}
+  .note{font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.5}
+  code{background:var(--accent-soft);padding:1px 5px;border-radius:4px;
+    font-size:12px}
+
+  .stale{background:#fff4e5;color:#8a5300;border:1px solid #f0d3a8;
+    padding:9px 14px;border-radius:8px;margin-bottom:12px;font-size:13px}
+  @media (prefers-color-scheme:dark){
+    .stale{background:#3a2c14;color:#e5c188;border-color:#5c4520}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Tamil Nadu Tenders</h1>
+    <div class="sub" id="hdr">loading&hellip;</div>
+  </div>
+  <div class="tabs">
+    <button class="tab on" id="t-tenders">Tenders</button>
+    <button class="tab" id="t-alerts">Alerts</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="side" id="side">
+    <details id="filters" open>
+    <summary>Filters</summary>
+    <label>Search</label>
+    <input id="f-q" placeholder="title, tender ID, town&hellip;">
+    <label>Department</label><select id="f-dept"></select>
+    <label>District</label><select id="f-district"></select>
+    <label>Local body</label><select id="f-local"></select>
+    <label>Work type</label><select id="f-work"></select>
+    <label>Estimated amount (&#8377;)</label>
+    <div class="row2">
+      <input id="f-min" type="number" placeholder="min">
+      <input id="f-max" type="number" placeholder="max">
+    </div>
+    <label>Closing within</label>
+    <select id="f-closing">
+      <option value="">Any time</option>
+      <option value="3">3 days</option>
+      <option value="7">7 days</option>
+      <option value="14">14 days</option>
+      <option value="30">30 days</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:14px">
+      <input type="checkbox" id="f-closed" style="width:auto;margin:0">
+      <span>Include closed tenders</span>
+    </label>
+    <button class="clear" id="f-clear">Clear filters</button>
+    </details>
+    <div class="note" id="alert-note" style="display:none">
+      Changes the engine spotted, newest first. Refreshed nightly.
+    </div>
+  </aside>
+  <main id="main"><div class="empty">Loading tenders&hellip;</div></main>
+</div>
+
+<script>
+// Everything runs in the browser: this is a static site on GitHub Pages,
+// so there is no server to ask. data.json is rebuilt nightly by the
+// scrape workflow and is ~300 KB gzipped, which loads once and then
+// filters instantly with no round-trips.
+const $ = id => document.getElementById(id);
+const esc = s => (s||'').replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money = v => v ? '\u20B9' + v : '\u2014';
+let DB = {tenders:[], events:[]}, view = 'tenders';
+
+const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,
+                jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+// Portal dates look like "15-Sep-2026 11:00 AM".
+function parseDate(s){
+  if(!s) return null;
+  const m = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})(?:\s+(\d{1,2}):(\d{2})\s*(AM|PM))?/.exec(s.trim());
+  if(!m) return null;
+  let h = m[4] ? +m[4] : 0;
+  if(m[6] === 'PM' && h < 12) h += 12;
+  if(m[6] === 'AM' && h === 12) h = 0;
+  return new Date(+m[3], MONTHS[m[2].toLowerCase()], +m[1], h, m[5] ? +m[5] : 0);
+}
+function amount(t){
+  const n = parseFloat(String(t.est_amount_raw||'').replace(/[^0-9.]/g,''));
+  return isNaN(n) ? null : n;
+}
+function fill(sel, items, anyLabel){
+  sel.innerHTML = '<option value="">' + anyLabel + '</option>' +
+    items.map(i => '<option value="' + esc(i) + '">' + esc(i) + '</option>').join('');
+}
+const uniq = (rows, key) =>
+  [...new Set(rows.map(r => r[key]).filter(Boolean))].sort();
+
+function apply(){
+  const q = $('f-q').value.trim().toLowerCase();
+  const dept = $('f-dept').value, dist = $('f-district').value;
+  const local = $('f-local').value, work = $('f-work').value;
+  const min = parseFloat($('f-min').value), max = parseFloat($('f-max').value);
+  const days = $('f-closing').value ? +$('f-closing').value : null;
+  const now = new Date();
+  const horizon = days ? new Date(now.getTime() + days*864e5) : null;
+  let closedHidden = 0;
+
+  const out = DB.tenders.filter(t => {
+    if (dept && t.department !== dept) return false;
+    if (dist && t.district !== dist) return false;
+    if (local && t.local_body !== local) return false;
+    if (work && !(t.work_list||[]).includes(work)) return false;
+    if (q && !((t.title||'') + ' ' + (t.tender_id||'') + ' ' +
+               (t.local_body||'') + ' ' + (t.ref_number||''))
+               .toLowerCase().includes(q)) return false;
+    const a = amount(t);
+    if (!isNaN(min) && (a === null || a < min)) return false;
+    if (!isNaN(max) && (a === null || a > max)) return false;
+    if (horizon && (!t._d || t._d > horizon)) return false;
+    if (t._closed){ closedHidden++; if(!$('f-closed').checked) return false; }
+    return true;
+  });
+  out.sort((a,b) => (a._closed - b._closed) ||
+    ((a._d ? a._d.getTime() : 8.64e15) - (b._d ? b._d.getTime() : 8.64e15)));
+  return {out, closedHidden};
+}
+
+function tenderCard(t){
+  const days = t._d === null ? '' : t._closed ? ' (closed)'
+    : ' (' + Math.max(0, Math.round((t._d - new Date())/864e5)) + 'd left)';
+  const close = (!t._closed && t._d && (t._d - new Date()) < 3*864e5)
+    ? '<span class="soon">' + esc(t.closing_date) + '</span>' : esc(t.closing_date);
+  return '<article class="card">' +
+    '<h3>' + (esc(t.title) || '(untitled)') + '</h3>' +
+    '<div class="chips"><span class="chip">' + esc(t.department) + '</span>' +
+      (t.work_list||[]).map(w => '<span class="chip grey">' + esc(w) + '</span>').join('') +
+      (t.status && t.status !== 'active'
+        ? '<span class="chip grey">' + esc(t.status) + '</span>' : '') +
+    '</div><dl>' +
+      '<div><dt>Tender ID</dt><dd>' + esc(t.tender_id) + '</dd></div>' +
+      '<div><dt>District</dt><dd>' + (esc(t.district)||'\u2014') + '</dd></div>' +
+      '<div><dt>Local body</dt><dd>' + (esc(t.local_body)||'\u2014') + '</dd></div>' +
+      '<div><dt>Estimated amount</dt><dd>' + money(esc(t.est_amount_raw)) + '</dd></div>' +
+      '<div><dt>Published</dt><dd>' + (esc(t.published_date)||'\u2014') + '</dd></div>' +
+      '<div><dt>Closing</dt><dd>' + close + days + '</dd></div>' +
+      '<div><dt>EMD</dt><dd>' + money(esc(t.emd)) + '</dd></div>' +
+      '<div><dt>Tender fee</dt><dd>' + money(esc(t.tender_fee)) + '</dd></div>' +
+      '<div style="grid-column:1/-1"><dt>Organisation</dt><dd>' +
+        (esc(t.org_chain)||'\u2014') + '</dd></div>' +
+      (t.eligibility ? '<div style="grid-column:1/-1"><dt>Eligibility</dt><dd>' +
+        esc(t.eligibility) + '</dd></div>' : '') +
+    '</dl></article>';
+}
+
+const BADGE = {NEW:'new', CORRIGENDUM:'corrected', RETENDER:'retendered',
+               DATE_EXTENSION:'extended', CANCELLATION:'cancelled'};
+
+function alertCard(e){
+  const t = DB.byId[e.tender_id] || {};
+  const b = BADGE[e.event_type] || 'new';
+  return '<article class="card"><div class="chips">' +
+    '<span class="badge ' + b + '">' + b + '</span>' +
+    '<span class="chip">' + esc(t.department||'') + '</span>' +
+    (t.work_list||[]).map(w => '<span class="chip grey">' + esc(w) + '</span>').join('') +
+    '</div><h3>' + (esc(t.title) || esc(e.tender_id)) + '</h3><dl>' +
+      '<div><dt>Tender ID</dt><dd>' + esc(e.tender_id) + '</dd></div>' +
+      '<div><dt>Where</dt><dd>' + (esc(t.district)||'\u2014') + ' / ' +
+        (esc(t.local_body)||'\u2014') + '</dd></div>' +
+      '<div><dt>Closing</dt><dd>' + (esc(t.closing_date)||'\u2014') + '</dd></div>' +
+      '<div><dt>Amount</dt><dd>' + money(esc(t.est_amount_raw)) + '</dd></div>' +
+      (e.detail && e.detail !== t.title
+        ? '<div style="grid-column:1/-1"><dt>What changed</dt><dd>' +
+          esc(e.detail) + '</dd></div>' : '') +
+    '</dl></article>';
+}
+
+function render(){
+  const main = $('main');
+  if (view === 'alerts'){
+    const ev = DB.events.slice(0, 300);
+    main.innerHTML = ev.length
+      ? '<p class="count">' + DB.events.length + ' change' +
+        (DB.events.length===1?'':'s') + ' recorded</p>' + ev.map(alertCard).join('')
+      : '<div class="empty">No changes recorded yet.</div>';
+    return;
+  }
+  const {out, closedHidden} = apply();
+  const shown = out.slice(0, 400);
+  main.innerHTML = shown.length
+    ? '<p class="count">' + out.length.toLocaleString() + ' tender' +
+      (out.length===1?'':'s') +
+      (out.length > shown.length ? ' \u00b7 showing first ' + shown.length : '') +
+      (closedHidden && !$('f-closed').checked
+        ? ' \u00b7 ' + closedHidden + ' closed hidden' : '') +
+      '</p>' + shown.map(tenderCard).join('')
+    : '<div class="empty">Nothing matches those filters.</div>';
+}
+
+async function boot(){
+  let d;
+  try {
+    d = await (await fetch('data.json?v=' + Date.now())).json();
+  } catch (err) {
+    $('main').innerHTML = '<div class="empty">Could not load the tender data.' +
+      '<br>If this persists, the nightly update may have failed.</div>';
+    return;
+  }
+  const now = new Date();
+  d.tenders.forEach(t => {
+    t.work_list = (t.work_categories||'').split(',').filter(Boolean);
+    t._d = parseDate(t.closing_date);
+    t._closed = !!(t._d && t._d < now);
+  });
+  DB = d;
+  DB.byId = Object.fromEntries(d.tenders.map(t => [t.tender_id, t]));
+  DB.events.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+
+  fill($('f-dept'), uniq(d.tenders,'department'), 'All departments');
+  fill($('f-district'), uniq(d.tenders,'district'), 'All districts');
+  fill($('f-local'), uniq(d.tenders,'local_body'), 'All local bodies');
+  fill($('f-work'), [...new Set(d.tenders.flatMap(t=>t.work_list))].sort(),
+       'All work types');
+  $('hdr').textContent = d.tenders.length.toLocaleString() + ' tenders \u00b7 ' +
+    uniq(d.tenders,'district').length + ' districts \u00b7 updated ' +
+    (d.generated_at||'').slice(0,10);
+
+  // Say so plainly if the nightly job has not run for a while, rather than
+  // quietly showing stale tenders as if they were current.
+  const gen = d.generated_at ? new Date(d.generated_at) : null;
+  if (gen && (now - gen) > 3*864e5){
+    const div = document.createElement('div');
+    div.className = 'stale';
+    div.textContent = 'This data was last updated on ' +
+      d.generated_at.slice(0,10) + '. The nightly update may have stopped.';
+    $('main').before(div);
+  }
+  render();
+}
+
+let timer;
+document.querySelectorAll('#side select, #side input').forEach(el =>
+  el.addEventListener('input', () => {
+    clearTimeout(timer); timer = setTimeout(render, 120);
+  }));
+$('f-clear').onclick = () => {
+  document.querySelectorAll('#side select, #side input').forEach(el => {
+    if (el.type === 'checkbox') el.checked = false; else el.value = '';
+  });
+  render();
+};
+function setView(v){
+  view = v;
+  $('t-tenders').classList.toggle('on', v === 'tenders');
+  $('t-alerts').classList.toggle('on', v === 'alerts');
+  $('side').style.opacity = v === 'alerts' ? .45 : 1;
+  $('side').style.pointerEvents = v === 'alerts' ? 'none' : 'auto';
+  $('alert-note').style.display = v === 'alerts' ? 'block' : 'none';
+  render();
+}
+$('t-tenders').onclick = () => setView('tenders');
+$('t-alerts').onclick = () => setView('alerts');
+if (window.matchMedia('(max-width:820px)').matches) $('filters').open = false;
+boot();
+</script>
+</body>
+</html>
