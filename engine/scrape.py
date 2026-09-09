@@ -318,8 +318,17 @@ def _goto_with_retry(page, url: str, attempts: int = 3) -> bool:
 
 def _open_listing(page, window: str) -> None:
     """Load the listing and switch to the requested closing-date window."""
-    page.goto(LIST_URL, wait_until="domcontentloaded")
-    _wait_for_rows(page)
+    # The portal intermittently answers with "Problem in accessing the
+    # portal, It is suggested that you may close the Browser window and
+    # reopen the browser" instead of the listing. It is transient — a fresh
+    # load a few seconds later works — so retry rather than fail the run.
+    for attempt in range(1, 4):
+        _goto_with_retry(page, LIST_URL)
+        if _wait_for_rows(page, timeout=20_000):
+            break
+        if attempt < 3:
+            time.sleep(THROTTLE_SECONDS * attempt * 4)
+
     key = WINDOWS.get(window, "tab_14day")
     if key != "tab_today":
         tab = page.query_selector(SELECTORS[key])
@@ -328,11 +337,20 @@ def _open_listing(page, window: str) -> None:
                 f"Could not find the '{window} day' tab ({SELECTORS[key]}). "
                 "The portal layout may have changed — re-run with --probe."
             )
-        if not _click_and_wait(page, tab):
+        ok = _click_and_wait(page, tab)
+        if not ok:
+            # Same transient failure can hit the tab switch. One clean retry
+            # from the top before giving up.
+            time.sleep(THROTTLE_SECONDS * 6)
+            _goto_with_retry(page, LIST_URL)
+            _wait_for_rows(page, timeout=20_000)
+            tab = page.query_selector(SELECTORS[key])
+            ok = tab is not None and _click_and_wait(page, tab)
+        if not ok:
             raise RuntimeError(
-                f"The '{window} day' tab loaded no rows. If the portal has "
-                "added a CAPTCHA here too, there is no open route left — "
-                "see the module docstring."
+                f"The '{window} day' tab loaded no rows after retries. Either "
+                "the portal is refusing this IP, or it has added a CAPTCHA "
+                "here too. Run engine/diagnose.py to see which."
             )
 
 
