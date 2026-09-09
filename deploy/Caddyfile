@@ -1,0 +1,24 @@
+# Caddy gets a real HTTPS certificate automatically and renews it.
+# HTTPS is not optional here: Web Push (Phase 4) refuses to run without it.
+DOMAIN_PLACEHOLDER {
+	email EMAIL_PLACEHOLDER
+
+	# Private app: everyone must log in. Change the username by editing
+	# this block, then: systemctl reload caddy
+	basic_auth {
+		kim PASSWORD_HASH_PLACEHOLDER
+	}
+
+	reverse_proxy 127.0.0.1:8000
+
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000;"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+	log {
+		output file /var/log/caddy/tn-tender.log
+	}
+}

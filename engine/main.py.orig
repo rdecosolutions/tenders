@@ -1,0 +1,83 @@
+"""
+Main runner — ties the engine together.
+
+  scrape (raw rows) -> classify (dept + work tags) -> store (upsert + events)
+
+Run:
+  python engine/main.py               # full statewide run
+  python engine/main.py --district Thanjavur
+  python engine/main.py --since-hours 24   # print alerts from last 24h
+
+This is the process the app's backend calls on a schedule. The app UI then
+reads data/tenders.db directly (tenders + events tables).
+"""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timedelta, timezone
+
+from classify import classify
+from scrape import scrape
+from store import connect, upsert, recent_events
+
+
+def run(headless: bool = True, district_filter: str | None = None) -> dict:
+    conn = connect()
+    counts = {"scanned": 0, "NEW": 0, "CORRIGENDUM": 0, "RETENDER": 0,
+              "DATE_EXTENSION": 0, "CANCELLATION": 0}
+
+    for raw in scrape(headless=headless):
+        counts["scanned"] += 1
+
+        # Optional district narrowing (statewide by default).
+        if district_filter:
+            hay = f"{raw.get('district','')} {raw.get('local_body','')} " \
+                  f"{raw.get('title','')}".lower()
+            if district_filter.lower() not in hay:
+                continue
+
+        tags = classify(raw.get("title", ""), raw.get("org", ""),
+                        raw.get("_raw", ""))
+        raw["department"] = tags["department"]
+        raw["work_categories"] = tags["work_categories"]
+
+        for ev in upsert(conn, raw):
+            counts[ev] = counts.get(ev, 0) + 1
+
+    conn.close()
+    return counts
+
+
+def show_alerts(since_hours: int) -> None:
+    conn = connect()
+    since = (datetime.now(timezone.utc) -
+             timedelta(hours=since_hours)).isoformat()
+    rows = recent_events(conn, since)
+    if not rows:
+        print(f"No events in the last {since_hours}h.")
+        return
+    print(f"{len(rows)} event(s) in last {since_hours}h:\n")
+    for r in rows:
+        print(f"[{r['event_type']}] {r['department']} | "
+              f"{r['district']}/{r['local_body']} | {r['title'][:60]}")
+        print(f"    closing: {r['closing_date']}  amt: {r['est_amount_raw']}")
+        print(f"    {r['doc_link']}\n")
+    conn.close()
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--district", default=None)
+    ap.add_argument("--since-hours", type=int, default=None)
+    ap.add_argument("--show", action="store_true", help="visible browser")
+    args = ap.parse_args()
+
+    if args.since_hours is not None:
+        show_alerts(args.since_hours)
+    else:
+        result = run(headless=not args.show, district_filter=args.district)
+        print("Run complete:", result)
+        if result["scanned"] == 0:
+            print("\n0 scanned — the scraper selectors need fixing against "
+                  "the live site. Run: python engine/scrape.py --probe")

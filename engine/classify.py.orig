@@ -1,0 +1,168 @@
+"""
+Classification engine.
+
+Turns a raw tender (title + organisation + any description text) into:
+  - department  : one of MAWS / RD&PR / DTP / ADW / HR&CE  (or UNKNOWN)
+  - work_categories : list of the standard work-category tags (multi-tag)
+
+The rules come straight from the Proposed Flow document. They are keyword
+based and deliberately transparent so the app designer can tune them
+without touching scraper code. Order matters only for department: an
+organisation-name match is trusted before a title-keyword guess.
+
+IMPORTANT (for whoever finishes this in Claude Code):
+These keyword sets are a starting point built WITHOUT access to the live
+portal's real organisation strings. Once you can see real tender rows,
+refine ORG_HINTS especially — the exact department/board names GePNIC
+uses are the single biggest accuracy lever here.
+"""
+
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# DEPARTMENTS
+# ---------------------------------------------------------------------------
+# Canonical department codes exactly as the doc specifies (HR&CE, not HRNC).
+DEPARTMENTS = ["MAWS", "RD&PR", "DTP", "ADW", "HR&CE"]
+
+# Strong signals: if the tender's organisation / inviting-authority text
+# contains one of these, we trust it over any title guess.
+ORG_HINTS = {
+    "MAWS": [
+        "municipal administration", "water supply", "cmwssb", "corporation",
+        "municipality", "commissioner of municipal", "twad",  # refine live
+    ],
+    "RD&PR": [
+        "rural development", "panchayat raj", "block development",
+        "district rural development", "drda", "village panchayat",
+        "panchayat union",
+    ],
+    "DTP": [
+        "town panchayat", "directorate of town panchayat",
+    ],
+    "ADW": [
+        "adi dravidar", "adw", "tribal welfare", "welfare school",
+        "welfare hostel",
+    ],
+    "HR&CE": [
+        "hr&ce", "hindu religious", "charitable endowment",
+        "devasthanam", "temple", "arulmigu",
+    ],
+}
+
+# Weaker signals from the title itself, used only when ORG_HINTS is silent.
+TITLE_DEPT_HINTS = {
+    "HR&CE": ["temple", "ther", "temple car", "arulmigu", "mandapam", "gopuram"],
+    "ADW": ["welfare school", "welfare hostel", "adi dravidar", "hostel"],
+    "DTP": ["town panchayat"],
+    "RD&PR": ["village road", "panchayat union", "rural"],
+    "MAWS": ["ugss", "underground sewer", "municipality", "corporation"],
+}
+
+# ---------------------------------------------------------------------------
+# WORK CATEGORIES  (multi-tag; a tender can match several)
+# ---------------------------------------------------------------------------
+# Canonical tags mirror STEP 3 "Work Category" in the doc.
+WORK_CATEGORIES = {
+    "Water Supply": [
+        "water supply", "infiltration well", "collection well", "o&m water",
+        "hand pump", "overhead tank", "ohts", "water tank",
+    ],
+    "Motor & Pump Supply": [
+        "motor supply", "supply of motor", "pump", "motor rewinding",
+        "rewinding", "submersible", "pumpset", "pump set",
+    ],
+    "UGSS": [
+        "ugss", "underground sewer", "sewer well", "sewerage", "sewer",
+        "non-clog", "non clog",
+    ],
+    "Drainage": [
+        "drainage", "storm water", "storm-water", "open drain", "side drain",
+    ],
+    "Roads (BT)": [
+        "bt road", "bituminous", "b.t road", "black top", "blacktop",
+        "wbm", "premix",
+    ],
+    "Roads (CC)": [
+        "cc road", "c.c road", "cement concrete road", "concrete road",
+    ],
+    "Roads (Paver Block)": [
+        "paver block", "paver-block", "interlocking", "paving block",
+    ],
+    "Biomining": [
+        "biomining", "bio-mining", "bio mining", "legacy waste",
+    ],
+    "Solid Waste Management": [
+        "solid waste", "swm", "fresh waste", "waste processing",
+        "garbage", "compost", "mcf", "micro compost",
+    ],
+    "Buildings": [
+        "building", "school building", "hostel building", "community hall",
+        "office building", "panchayat building", "construction of building",
+    ],
+    "Civil Works": [
+        "civil work", "compound wall", "renovation", "repair", "rcc",
+        "reinforced cement concrete", "construction of", "improvement",
+        "restoration", "strengthening",
+    ],
+    "Temple Car (New)": [
+        "new temple car", "new ther", "fabrication of temple car",
+        "construction of temple car",
+    ],
+    "Temple Car (Renovation)": [
+        "renovation of temple car", "repair of temple car",
+        "temple car renovation", "existing temple car",
+    ],
+}
+
+
+def _hit(text: str, needles: list[str]) -> bool:
+    return any(n in text for n in needles)
+
+
+def classify_department(title: str, org: str = "") -> str:
+    """Return a department code, or 'UNKNOWN'."""
+    org_l = (org or "").lower()
+    for dept in DEPARTMENTS:
+        if _hit(org_l, ORG_HINTS[dept]):
+            return dept
+
+    title_l = (title or "").lower()
+    # Title fallback — check HR&CE/ADW/DTP first as they're most distinctive.
+    for dept in ["HR&CE", "ADW", "DTP", "RD&PR", "MAWS"]:
+        if _hit(title_l, TITLE_DEPT_HINTS[dept]):
+            return dept
+    return "UNKNOWN"
+
+
+def classify_work(title: str, description: str = "") -> list[str]:
+    """Return all matching work-category tags (possibly empty)."""
+    text = f"{title} {description}".lower()
+    tags = [cat for cat, needles in WORK_CATEGORIES.items() if _hit(text, needles)]
+
+    # Temple-car specifics should suppress the generic 'Civil Works' noise
+    # only if nothing else matched, keep behaviour simple and additive here.
+    return tags
+
+
+def classify(title: str, org: str = "", description: str = "") -> dict:
+    return {
+        "department": classify_department(title, org),
+        "work_categories": classify_work(title, description),
+    }
+
+
+if __name__ == "__main__":
+    # Quick self-check with synthetic examples (not live data).
+    samples = [
+        ("Construction of CC road at Kumbakonam Ward 12",
+         "Commissioner, Kumbakonam Municipality"),
+        ("Renovation of temple car at Arulmigu Temple",
+         "HR&CE Department"),
+        ("Supply and rewinding of submersible motor",
+         "Block Development Officer, Panchayat Union"),
+        ("Construction of welfare hostel building",
+         "Adi Dravidar Welfare"),
+    ]
+    for title, org in samples:
+        print(f"\n{title}\n  org={org}\n  ->", classify(title, org))

@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the TN Tender engine nightly
+
+[Timer]
+# 02:30 server time, once a day. The portal is quiet then, and it keeps us
+# well inside "polite" (one full run per day).
+OnCalendar=*-*-* 02:30:00
+# If the server was off at 02:30, run once it is back rather than skipping.
+Persistent=true
+# Spread the start by up to 20 min so we are not hitting the portal at the
+# same instant every single night.
+RandomizedDelaySec=1200
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=TN Tender engine - one full scrape run
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=tender
+WorkingDirectory=/opt/tn-tender
+ExecStart=/opt/tn-tender/venv/bin/python engine/main.py
+# A full statewide sweep is ~30 min once backfilled; the first one is
+# 2-3 hours. Generous ceiling so a slow portal day is not killed midway.
+TimeoutStartSec=5h
+NoNewPrivileges=true
+PrivateTmp=true

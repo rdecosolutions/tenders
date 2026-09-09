@@ -1,0 +1,162 @@
+"""
+Statewide scraper for tntenders.gov.in (GePNIC).
+
+WHAT THIS DOES
+  Loads the portal's tender listings, walks all result pages, and yields
+  raw tender dicts. It does NOT classify or store — main.py wires those in.
+
+STATUS / READ THIS FIRST (for finishing in Claude Code)
+  This scraper is written WITHOUT access to the live portal (the machine
+  that generated it is network-isolated). The row-parsing below is a
+  best-effort structural guess. Your job on a real machine:
+
+    1. Run `python engine/scrape.py --probe` to dump the real page:
+       it saves page.html and a screenshot so you can see actual markup.
+    2. Fix SELECTORS below to match the real table/columns.
+    3. GePNIC usually has a "Search Active Tenders" flow AND an
+       "Organisation-wise" / "Tenders by Location" browse. Statewide
+       coverage is easiest via the organisation/department browse plus
+       the advanced-search date filter. Wire whichever proves complete.
+    4. Watch for: JS-rendered tables (Playwright handles), pagination,
+       session cookies, and occasional CAPTCHA on heavy use — which is
+       exactly why we throttle to a couple of runs a day.
+
+  Everything downstream (classify.py, store.py) is already tested and
+  correct, so once real rows flow out of here, the app data is real.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import time
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+PORTAL = "https://tntenders.gov.in/nicgep/app"
+NAV_TIMEOUT = 60_000
+THROTTLE_SECONDS = 1.5   # polite pause between page fetches
+
+# --- SELECTORS: adjust against the live DOM (see --probe) -------------------
+SELECTORS = {
+    "search_link_labels": [
+        "Search Active Tenders", "Tenders", "Latest Tenders",
+        "Active Tenders", "Organisation", "Tenders by Location",
+    ],
+    "result_row": "table tr",          # refine to the real results table
+    "next_link": "a:has-text('Next'), a:has-text('>')",
+    "min_cells": 3,
+}
+
+TENDER_ID_RE = re.compile(r"\d{4}_[A-Za-z&]+_\d+_\d+")
+
+
+def probe(headless: bool = True) -> None:
+    """Dump the live page so a human/Claude Code can see real markup."""
+    out = Path(__file__).resolve().parent.parent / "data"
+    out.mkdir(parents=True, exist_ok=True)
+    with sync_playwright() as p:
+        b = p.chromium.launch(headless=headless)
+        pg = b.new_page()
+        pg.set_default_timeout(NAV_TIMEOUT)
+        pg.goto(PORTAL, wait_until="domcontentloaded")
+        (out / "page.html").write_text(pg.content(), encoding="utf-8")
+        pg.screenshot(path=str(out / "page.png"), full_page=True)
+        print(f"Saved {out/'page.html'} and {out/'page.png'}")
+        print("Open these to see the real structure, then fix SELECTORS.")
+        b.close()
+
+
+def _row_to_tender(texts: list[str], link: str) -> dict | None:
+    rowtext = " | ".join(texts)
+    m = TENDER_ID_RE.search(rowtext)
+    tender_id = m.group(0) if m else None
+    if not tender_id:
+        return None
+    title = next((t for t in texts if len(t) > 25), rowtext)
+    return {
+        "tender_id": tender_id,
+        "ref_number": "",
+        "title": title,
+        "org": "",                    # fill from the real column
+        "district": "",               # fill from the real column
+        "local_body": "",
+        "est_amount_raw": next((t for t in texts if "₹" in t or
+                                re.search(r"\d{4,}", t)), ""),
+        "published_date": "",
+        "closing_date": "",
+        "emd": "",
+        "tender_fee": "",
+        "eligibility": "",
+        "doc_link": link or PORTAL,
+        "apply_link": link or PORTAL,
+        "status": "active",
+        "_raw": rowtext,
+    }
+
+
+def scrape(headless: bool = True, max_pages: int = 50):
+    """Yield raw tender dicts from every result page."""
+    with sync_playwright() as p:
+        b = p.chromium.launch(headless=headless)
+        pg = b.new_page()
+        pg.set_default_timeout(NAV_TIMEOUT)
+        pg.goto(PORTAL, wait_until="domcontentloaded")
+
+        for label in SELECTORS["search_link_labels"]:
+            try:
+                lk = pg.get_by_role("link", name=re.compile(label, re.I)).first
+                if lk.count() > 0:
+                    lk.click()
+                    pg.wait_for_load_state("domcontentloaded")
+                    break
+            except Exception:
+                continue
+
+        page_num = 1
+        while page_num <= max_pages:
+            for r in pg.query_selector_all(SELECTORS["result_row"]):
+                cells = r.query_selector_all("td")
+                if len(cells) < SELECTORS["min_cells"]:
+                    continue
+                texts = [c.inner_text().strip() for c in cells]
+                link_el = r.query_selector("a[href]")
+                href = link_el.get_attribute("href") if link_el else ""
+                if href and not href.startswith("http"):
+                    href = PORTAL.rsplit("/", 1)[0] + "/" + href.lstrip("/")
+                t = _row_to_tender(texts, href)
+                if t:
+                    yield t
+
+            nxt = pg.query_selector(SELECTORS["next_link"])
+            if not nxt:
+                break
+            try:
+                nxt.click()
+                pg.wait_for_load_state("domcontentloaded")
+                page_num += 1
+                time.sleep(THROTTLE_SECONDS)
+            except Exception:
+                break
+        b.close()
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--probe", action="store_true",
+                    help="dump live page.html + screenshot to data/")
+    ap.add_argument("--show", action="store_true",
+                    help="run browser headed (visible) for debugging")
+    args = ap.parse_args()
+    if args.probe:
+        probe(headless=not args.show)
+    else:
+        n = 0
+        for t in scrape(headless=not args.show):
+            n += 1
+            print(t["tender_id"], "|", t["title"][:70])
+        print(f"\nTotal rows parsed: {n}")
+        if n == 0:
+            print("0 rows — SELECTORS almost certainly need fixing. "
+                  "Run with --probe and inspect data/page.html.")

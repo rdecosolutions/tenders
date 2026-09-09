@@ -1,0 +1,19 @@
+[Unit]
+Description=TN Tender web app
+After=network.target
+
+[Service]
+Type=simple
+User=tender
+WorkingDirectory=/opt/tn-tender
+# Bound to localhost only. Caddy is the thing exposed to the internet; it
+# terminates TLS and asks for the password. The app itself has neither.
+ExecStart=/opt/tn-tender/venv/bin/python app/server.py --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

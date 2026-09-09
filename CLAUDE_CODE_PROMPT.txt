@@ -1,0 +1,61 @@
+Paste everything below into Claude Code, after: cd into this folder, then run `claude`.
+======================================================================
+
+This folder is the backend engine for a Tamil Nadu-wide government tender
+monitoring app. It was built with Claude in the web app, on a machine that
+could NOT reach the live portal — so one part (the scraper) needs finishing
+against the real site, which you can do because you have internet access.
+
+Read these first, in order, so you understand the design:
+  - README.md
+  - docs/TN_Tender_App_Build_Spec.docx  (the full plan and data model)
+  - engine/classify.py, engine/store.py, engine/scrape.py, engine/main.py
+
+Key facts:
+  - Target portal: https://tntenders.gov.in/nicgep/app (GePNIC system).
+  - Coverage is Tamil Nadu-wide across five departments: MAWS, RD&PR, DTP,
+    ADW, HR&CE (use HR&CE, not HRNC).
+  - classify.py (dept + work-category tagging) and store.py (SQLite history
+    + five event types: NEW, CORRIGENDUM, RETENDER, DATE_EXTENSION,
+    CANCELLATION) are already TESTED and working. Don't rewrite them unless
+    you find a real bug; refine the keyword lists if needed.
+  - scrape.py is the piece to finish.
+
+Please do this, walking me through each step and pausing when you need me:
+
+1. Set up the environment: confirm Python 3, then install playwright and its
+   chromium browser. Give me the commands; let me run them.
+
+2. Run `python3 engine/scrape.py --probe`. Open the saved data/page.html and
+   data/page.png and inspect the portal's REAL structure. Tell me what the
+   actual results table looks like.
+
+3. Fix the SELECTORS block and the row-parsing in engine/scrape.py so it
+   reliably returns real tenders statewide. Aim for the browse route that
+   gives full Tamil Nadu coverage (organisation/location browse plus the
+   advanced-search date filter is usually most complete). Correctly fill:
+   title, organisation, district, local_body, estimated amount, published
+   and closing dates, EMD, tender fee, doc/apply links, and status.
+   Note: Mayiladuthurai tenders sometimes sit under Thanjavur/Nagapattinam
+   circles — keep district and local_body as separate fields.
+
+4. Run `python3 engine/main.py` end to end and confirm real tenders land in
+   data/tenders.db, correctly classified. Then `python3 engine/main.py
+   --since-hours 24` to show the alerts feed.
+
+5. Once the data is real, help me build the app on top per the spec:
+   filters (Department -> District/Local Body -> Work Type -> Amount range
+   -> Closing Date), the ten-field tender card, and the daily alerts feed
+   with the five event badges. Recommend the lightest stack that fits and
+   scaffold it. Ask me before choosing web vs mobile.
+
+6. Help me schedule the engine to run once or twice a day, and advise on the
+   simplest always-on hosting so the app isn't dependent on my laptop.
+
+Constraints:
+  - Be polite to the portal: one or two full runs a day, throttled. No
+    aggressive scraping (risks CAPTCHA / IP block).
+  - Keep coverage statewide; do not silently narrow to a few towns.
+  - Explain choices in plain language — I run an agency, I'm not a developer.
+
+Start by reading the files and telling me your plan before changing code.

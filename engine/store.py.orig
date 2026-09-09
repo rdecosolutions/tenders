@@ -1,0 +1,218 @@
+"""
+Storage + change-detection layer (SQLite).
+
+Holds the full tender history so the app can show, and alert on, the five
+event types from the doc:
+    NEW • CORRIGENDUM • RETENDER • DATE_EXTENSION • CANCELLATION
+
+Design for the app designer:
+  tenders  -> current state of every tender (one row per tender_id)
+  events   -> append-only log of everything that happened (drives alerts)
+
+The app's "daily alerts" screen is just: SELECT * FROM events
+WHERE created_at >= <since> ORDER BY created_at DESC.
+
+Change detection compares a freshly scraped tender against the stored row:
+  - not seen before                    -> NEW
+  - closing date moved later           -> DATE_EXTENSION
+  - status/text says corrigendum       -> CORRIGENDUM
+  - status/text says cancelled/retender-> CANCELLATION / RETENDER
+  - amount or key fields changed        -> CORRIGENDUM (generic amendment)
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+
+DB_PATH = Path(__file__).resolve().parent.parent / "data" / "tenders.db"
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS tenders (
+    tender_id       TEXT PRIMARY KEY,
+    ref_number      TEXT,
+    department      TEXT,
+    work_categories TEXT,          -- comma-separated tags
+    district        TEXT,
+    local_body      TEXT,          -- town / municipality / panchayat
+    title           TEXT,
+    est_amount      REAL,          -- rupees, numeric
+    est_amount_raw  TEXT,          -- original string as shown
+    published_date  TEXT,
+    closing_date    TEXT,          -- ISO where possible
+    emd             TEXT,
+    tender_fee      TEXT,
+    eligibility     TEXT,
+    doc_link        TEXT,
+    apply_link      TEXT,
+    status          TEXT,          -- active / cancelled / retender / etc.
+    first_seen      TEXT,
+    last_seen       TEXT,
+    last_hash       TEXT           -- to detect any field change cheaply
+);
+
+CREATE TABLE IF NOT EXISTS events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tender_id   TEXT,
+    event_type  TEXT,              -- NEW/CORRIGENDUM/RETENDER/DATE_EXTENSION/CANCELLATION
+    detail      TEXT,
+    created_at  TEXT,
+    FOREIGN KEY (tender_id) REFERENCES tenders(tender_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at);
+CREATE INDEX IF NOT EXISTS idx_tenders_dept   ON tenders(department);
+CREATE INDEX IF NOT EXISTS idx_tenders_district ON tenders(district);
+"""
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA)
+    return conn
+
+
+def _hash_fields(t: dict) -> str:
+    key = "|".join(str(t.get(f, "")) for f in (
+        "title", "est_amount_raw", "closing_date", "status", "emd",
+        "tender_fee", "work_categories",
+    ))
+    return str(abs(hash(key)))
+
+
+def _parse_amount(raw: str) -> float | None:
+    if not raw:
+        return None
+    digits = "".join(c for c in raw if c.isdigit() or c == ".")
+    try:
+        return float(digits) if digits else None
+    except ValueError:
+        return None
+
+
+def _log(conn, tender_id: str, event_type: str, detail: str) -> None:
+    conn.execute(
+        "INSERT INTO events (tender_id, event_type, detail, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (tender_id, event_type, detail, _now()),
+    )
+
+
+def upsert(conn, t: dict) -> list[str]:
+    """
+    Insert or update one scraped tender. Returns the list of event types
+    raised for it this run (may be empty if nothing changed).
+    """
+    t = dict(t)
+    t.setdefault("est_amount", _parse_amount(t.get("est_amount_raw", "")))
+    if isinstance(t.get("work_categories"), list):
+        t["work_categories"] = ",".join(t["work_categories"])
+    new_hash = _hash_fields(t)
+    now = _now()
+    events: list[str] = []
+
+    row = conn.execute(
+        "SELECT * FROM tenders WHERE tender_id = ?", (t["tender_id"],)
+    ).fetchone()
+
+    status_text = f"{t.get('status','')} {t.get('title','')}".lower()
+
+    if row is None:
+        # brand new tender
+        t["first_seen"] = now
+        t["last_seen"] = now
+        t["last_hash"] = new_hash
+        cols = ",".join(t.keys())
+        qs = ",".join("?" for _ in t)
+        conn.execute(f"INSERT INTO tenders ({cols}) VALUES ({qs})",
+                     list(t.values()))
+        _log(conn, t["tender_id"], "NEW", t.get("title", ""))
+        events.append("NEW")
+        conn.commit()
+        return events
+
+    # existing tender — detect what changed
+    if new_hash != row["last_hash"]:
+        # 1. cancellation / retender by keyword
+        if any(w in status_text for w in ("cancel", "cancelled")):
+            _log(conn, t["tender_id"], "CANCELLATION", t.get("status", ""))
+            events.append("CANCELLATION")
+        elif "retender" in status_text or "re-tender" in status_text:
+            _log(conn, t["tender_id"], "RETENDER", t.get("status", ""))
+            events.append("RETENDER")
+
+        # 2. date extension — closing date moved later
+        old_close = row["closing_date"] or ""
+        new_close = t.get("closing_date", "") or ""
+        if new_close and old_close and new_close > old_close:
+            _log(conn, t["tender_id"], "DATE_EXTENSION",
+                 f"{old_close} -> {new_close}")
+            events.append("DATE_EXTENSION")
+
+        # 3. corrigendum — explicit keyword, or any other field change
+        if "corrigend" in status_text:
+            _log(conn, t["tender_id"], "CORRIGENDUM", t.get("status", ""))
+            events.append("CORRIGENDUM")
+        elif not events:
+            # generic amendment we couldn't classify more precisely
+            _log(conn, t["tender_id"], "CORRIGENDUM", "field(s) amended")
+            events.append("CORRIGENDUM")
+
+        conn.execute(
+            "UPDATE tenders SET title=?, est_amount=?, est_amount_raw=?, "
+            "closing_date=?, emd=?, tender_fee=?, eligibility=?, status=?, "
+            "work_categories=?, last_seen=?, last_hash=? WHERE tender_id=?",
+            (t.get("title"), t.get("est_amount"), t.get("est_amount_raw"),
+             t.get("closing_date"), t.get("emd"), t.get("tender_fee"),
+             t.get("eligibility"), t.get("status"), t.get("work_categories"),
+             now, new_hash, t["tender_id"]),
+        )
+    else:
+        conn.execute("UPDATE tenders SET last_seen=? WHERE tender_id=?",
+                     (now, t["tender_id"]))
+
+    conn.commit()
+    return events
+
+
+def recent_events(conn, since_iso: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT e.*, t.title, t.department, t.district, t.local_body, "
+        "t.est_amount_raw, t.closing_date, t.doc_link "
+        "FROM events e JOIN tenders t ON t.tender_id = e.tender_id "
+        "WHERE e.created_at >= ? ORDER BY e.created_at DESC",
+        (since_iso,),
+    ).fetchall()
+
+
+if __name__ == "__main__":
+    # Self-test the change detection with synthetic tenders (no live data).
+    import os
+    test_db = Path(__file__).resolve().parent.parent / "data" / "_test.db"
+    if test_db.exists():
+        os.remove(test_db)
+    c = connect(test_db)
+
+    t = {
+        "tender_id": "2026_MAWS_111_1", "title": "CC road Kumbakonam",
+        "department": "MAWS", "work_categories": ["Roads (CC)"],
+        "district": "Thanjavur", "local_body": "Kumbakonam",
+        "est_amount_raw": "3177000", "closing_date": "2026-02-10",
+        "status": "active",
+    }
+    print("run1:", upsert(c, t))                       # NEW
+    print("run2:", upsert(c, t))                       # (nothing)
+    t["closing_date"] = "2026-02-20"
+    print("run3:", upsert(c, t))                       # DATE_EXTENSION
+    t["status"] = "Corrigendum published"
+    print("run4:", upsert(c, t))                       # CORRIGENDUM
+    t["status"] = "Cancelled"
+    print("run5:", upsert(c, t))                       # CANCELLATION
+    os.remove(test_db)
