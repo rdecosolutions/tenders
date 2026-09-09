@@ -73,10 +73,11 @@ jobs:
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
           VAPID_SUBJECT: mailto:kim@piperocket.digital
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           SITE_URL: https://tenders.rdecosolutions.org/
         run: |
-          if [ -z "$VAPID_PRIVATE_KEY" ]; then
-            echo "No VAPID key configured yet - skipping notifications."
+          if [ -z "$VAPID_PRIVATE_KEY" ] && [ -z "$NTFY_TOPIC" ]; then
+            echo "No notification channel configured yet - skipping."
             exit 0
           fi
           pip install --quiet pywebpush

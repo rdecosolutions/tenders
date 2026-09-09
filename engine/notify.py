@@ -15,7 +15,18 @@ WHY IT LOOKS LIKE THIS
   capability URL: anyone who can read it can send notifications to that
   device, and this repository is public.
 
+Two channels, either or both. Whichever is configured gets used.
+
+  ntfy (easy)  — install the ntfy app, subscribe to a topic, set one secret.
+                 Nothing to store per device, nothing that expires.
+  Web Push     — native browser notifications, no extra app, but each
+                 device's subscription has to be pasted into a secret and
+                 re-pasted whenever the browser rotates it.
+
 Environment:
+  NTFY_TOPIC           ntfy topic name (repository secret) — the topic name
+                       IS the password, so it must be long and random
+  NTFY_SERVER          defaults to https://ntfy.sh
   VAPID_PRIVATE_KEY    the PEM private key (repository secret)
   VAPID_SUBJECT        mailto: address for the push service to complain to
   PUSH_SUBSCRIPTIONS   JSON array of PushSubscription objects
@@ -66,14 +77,57 @@ def build_digest(conn) -> tuple[str, str] | None:
     return title, body
 
 
+def send_ntfy(title: str, body: str) -> bool:
+    """
+    Post the digest to an ntfy topic. Stdlib only — no dependency to install.
+
+    The topic name is the only credential, so anyone who learns it can read
+    these alerts or send junk to the phone. That is the trade for needing no
+    account; keep the name long and random.
+    """
+    topic = os.environ.get("NTFY_TOPIC", "").strip()
+    if not topic:
+        return False
+    server = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request(
+        f"{server}/{topic}", data=body.encode("utf-8"), method="POST",
+        headers={
+            "Title": title,
+            "Tags": "page_facing_up",
+            "Click": SITE_URL,
+        })
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            print(f"ntfy: sent to {server}/***  (HTTP {resp.status})")
+        return True
+    except urllib.error.URLError as exc:
+        print(f"ntfy: failed ({exc}) — continuing")
+        return False
+
+
 def main() -> int:
     subs_raw = os.environ.get("PUSH_SUBSCRIPTIONS", "").strip()
-    if not subs_raw:
-        print("No PUSH_SUBSCRIPTIONS set — nobody to notify. Skipping.")
-        return 0
     key = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
-    if not key:
-        print("No VAPID_PRIVATE_KEY set — cannot sign a push. Skipping.")
+    have_webpush = bool(subs_raw and key)
+
+    if not have_webpush and not os.environ.get("NTFY_TOPIC", "").strip():
+        print("No notification channel configured — skipping.")
+        return 0
+
+    # Build the digest once and reuse it for every channel.
+    conn = connect()
+    digest = build_digest(conn)
+    conn.close()
+    if digest is None:
+        print(f"Nothing changed in the last {LOOKBACK_HOURS}h — no push sent.")
+        return 0
+    title, body = digest
+
+    send_ntfy(title, body)
+
+    if not have_webpush:
         return 0
 
     try:
@@ -83,14 +137,6 @@ def main() -> int:
         return 0
     if isinstance(subs, dict):          # a single device, pasted directly
         subs = [subs]
-
-    conn = connect()
-    digest = build_digest(conn)
-    conn.close()
-    if digest is None:
-        print(f"Nothing changed in the last {LOOKBACK_HOURS}h — no push sent.")
-        return 0
-    title, body = digest
 
     from pywebpush import WebPushException, webpush
     payload = json.dumps({"title": title, "body": body, "url": SITE_URL})
