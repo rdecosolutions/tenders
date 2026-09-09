@@ -32,22 +32,36 @@ password. Note the server's **IP address**.
 DigitalOcean works equally well — pick a $12/mo 2 GB droplet, not the $6
 1 GB one, for the same reason.
 
-### 2. Get a domain
+### 2. Point the subdomain at it
 
-Any registrar (Namecheap, Cloudflare, GoDaddy). `tenders.yourdomain.com` is
-fine — a subdomain of a domain you already own costs nothing extra.
+The domain is **rdecosolutions.org**, registered at **Spaceship**, and DNS
+is served by Spaceship's own nameservers (`launch1/launch2.spaceship.net`).
 
-In the registrar's DNS settings add one record:
+The apex and `www` already point at GitHub Pages
+(`rdecosolutions.github.io`). Leave those alone — adding a `tenders` record
+sits alongside them and does not disturb the existing site.
+`tenders.rdecosolutions.org` is currently unused.
 
-| Type | Name      | Value              |
-|------|-----------|--------------------|
-| A    | `tenders` | your server's IP   |
+In Spaceship → Domains → rdecosolutions.org → **Advanced DNS**, add:
 
-Wait a few minutes for it to take effect.
+| Type | Host      | Value            | TTL       |
+|------|-----------|------------------|-----------|
+| A    | `tenders` | your server's IP | Automatic |
+
+Check it took effect:
+
+```bash
+dig +short tenders.rdecosolutions.org
+```
+
+When that prints your server's IP, carry on. It is usually a few minutes.
 
 > The domain is genuinely required, not decoration: HTTPS certificates are
 > issued to names, not IP addresses, and Web Push notifications refuse to
 > work without HTTPS.
+>
+> If you ever move DNS to Cloudflare, keep this record **DNS only** (grey
+> cloud). A proxied record stops Caddy completing the certificate check.
 
 ---
 
@@ -60,6 +74,8 @@ rsync -av --exclude data --exclude '*.orig' --exclude logs \
   ~/Desktop/tn-tender-engine/ root@YOUR_SERVER_IP:/opt/tn-tender/
 ```
 
+(Or clone from GitHub on the server — see "Updating it later" below.)
+
 ```bash
 ssh root@YOUR_SERVER_IP
 ```
@@ -67,7 +83,7 @@ ssh root@YOUR_SERVER_IP
 On the server, run the setup script with your domain and email:
 
 ```bash
-cd /opt/tn-tender/deploy && bash setup.sh tenders.yourdomain.com you@email.com
+cd /opt/tn-tender/deploy && bash setup.sh tenders.rdecosolutions.org kim@piperocket.digital
 ```
 
 It asks you to choose a password — that's what you'll type when you open the
@@ -77,7 +93,7 @@ site. Then start the first backfill:
 systemctl start tn-tender-engine.service
 ```
 
-That's it. Open `https://tenders.yourdomain.com`, log in as `kim`, and
+That's it. Open `https://tenders.rdecosolutions.org`, log in as `kim`, and
 tenders appear as the backfill fills them in.
 
 ---
