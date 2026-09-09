@@ -114,12 +114,36 @@ systemctl start tn-tender-engine
 
 ## Updating it later
 
+From your Mac:
+
 ```bash
 rsync -av --exclude data ~/Desktop/tn-tender-engine/ root@YOUR_SERVER_IP:/opt/tn-tender/ && ssh root@YOUR_SERVER_IP 'systemctl restart tn-tender-app'
 ```
 
 The `--exclude data` matters: it stops your Mac's copy from overwriting the
 server's database, which is the accumulated history.
+
+### Or pull from GitHub instead
+
+Once the repo exists you can update the server straight from it, which is
+tidier because the server then matches a known commit rather than whatever
+happened to be on your laptop.
+
+If the repo is **public**, on the server:
+
+```bash
+cd /opt/tn-tender && git pull && systemctl restart tn-tender-app
+```
+
+If it is **private**, the server needs its own read-only access. Generate a
+key on the server, add it to the repo as a deploy key (GitHub → repo →
+Settings → Deploy keys → Add, read-only), then clone over SSH:
+
+```bash
+ssh-keygen -t ed25519 -C "tn-tender server" -f ~/.ssh/id_ed25519 -N "" && cat ~/.ssh/id_ed25519.pub
+```
+
+Until you set that up, rsync works fine and needs nothing extra.
 
 ## A note on the database
 

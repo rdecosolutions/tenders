@@ -82,6 +82,13 @@ python3 -c "import sys; sys.path.insert(0,'engine'); import store; \
 originally, and it meant every improvement to the keyword lists re-tagged
 old tenders and fired a fake "corrected" alert for each one.
 
+## Version control
+This is a git repo (branch `main`). `data/` is ignored — the database is
+accumulated state that lives on the server, and a laptop copy must never
+overwrite it. `.env` / `config.txt` are ignored ready for Phase 4 secrets.
+The `*.py.orig` files are the original handoff versions, kept deliberately
+so the live-site rewrite stays inspectable.
+
 ## Decisions Kim has made
 - Audience is Kim plus a few people, NOT a distributed product. So the
   mobile route is a **PWA** (installable web app + Web Push), not a native
