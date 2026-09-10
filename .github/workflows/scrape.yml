@@ -35,6 +35,14 @@ jobs:
           pip install --quiet playwright
           playwright install --with-deps chromium
 
+      # Cheap, offline, and catches the phantom-alert class of bug before
+      # it can flood a night's notifications.
+      - name: Regression tests
+        run: |
+          python3 engine/test_no_phantoms.py
+          python3 engine/store.py > /dev/null
+          python3 engine/classify.py > /dev/null
+
       - name: Rebuild the database from the committed data
         run: python3 engine/export.py --restore
 

@@ -230,9 +230,13 @@ def upsert(conn, t: dict) -> list[str]:
                  f"{old_close} -> {new_close}")
             events.append("DATE_EXTENSION")
 
-        # 3. corrigendum — explicit keyword, or any other field change
+        # 3. corrigendum — explicit keyword, or any other field change.
+        # Either way the alert says WHICH field moved: "corrigendum" on its
+        # own tells a bidder nothing, and a tender that sits at
+        # status='corrigendum' would otherwise report that same useless
+        # word for every later change it ever has.
         if "corrigend" in status_text:
-            _log(conn, t["tender_id"], "CORRIGENDUM", t.get("status", ""))
+            _log(conn, t["tender_id"], "CORRIGENDUM", _describe_change(row, t))
             events.append("CORRIGENDUM")
         elif not events:
             # An amendment we can't label as one of the other four types —

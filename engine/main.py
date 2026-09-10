@@ -35,18 +35,25 @@ from store import connect, recent_events, upsert
 # a tender we already know, we must carry these forward from the stored row —
 # otherwise they come back empty, the change-hash differs, and the tender
 # raises a phantom CORRIGENDUM on every single run.
-# NOTE "status" belongs here. It is derived from the detail page (a tender
-# with a corrigendum listed on it becomes status='corrigendum'), and the
-# listing always says "active". Leaving it out meant a tender flipped
-# corrigendum -> active on the next run, the change-hash moved, and it
-# raised a phantom "field(s) amended" CORRIGENDUM every single run.
-DETAIL_FIELDS = ("est_amount_raw", "emd", "tender_fee", "eligibility",
-                 "location", "pincode", "org_chain", "status")
+# Fields ONLY the detail page knows. When we skip the detail fetch these
+# come back empty (or, for status, wrong), so they must be restored from
+# the stored row UNCONDITIONALLY — not merely when the scraped value is
+# blank.
+#
+# That distinction is the whole bug: the listing always reports
+# status="active", which is truthy, so a fill-only-if-empty rule silently
+# left it alone. A tender whose detail page showed a corrigendum flipped
+# corrigendum -> active every night, the change-hash moved, and it raised a
+# phantom CORRIGENDUM alert. Every night. Forever.
+#
+# org_chain is deliberately NOT here: the listing does supply it.
+DETAIL_ONLY_FIELDS = ("est_amount_raw", "emd", "tender_fee", "eligibility",
+                      "location", "pincode", "status")
 
 
 def _load_known(conn) -> dict[str, dict]:
     """Snapshot what we already store, keyed by tender_id."""
-    cols = "tender_id, closing_date, " + ", ".join(DETAIL_FIELDS)
+    cols = "tender_id, closing_date, " + ", ".join(DETAIL_ONLY_FIELDS)
     return {r["tender_id"]: dict(r)
             for r in conn.execute(f"SELECT {cols} FROM tenders")}
 
@@ -103,12 +110,11 @@ def run(headless: bool = True,
         if raw.get("_detail_fetched"):
             counts["detail_fetched"] += 1
         elif prev is not None:
-            # Detail was skipped this run, so the detail-only fields came
-            # back empty. Reuse what we already stored, or the change-hash
-            # shifts and the tender raises a phantom amendment.
-            for field in DETAIL_FIELDS:
-                if not raw.get(field):
-                    raw[field] = prev.get(field) or ""
+            # Detail was skipped this run, so nothing in the scraped row can
+            # be trusted for these fields — restore all of them from what we
+            # stored, or the change-hash shifts and we invent an amendment.
+            for field in DETAIL_ONLY_FIELDS:
+                raw[field] = prev.get(field) or ""
 
         tags = classify(raw.get("title", ""), raw.get("org", ""),
                         raw.get("_raw", ""), raw.get("tender_id", ""))
