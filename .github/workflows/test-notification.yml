@@ -1,0 +1,34 @@
+name: Test notification
+
+# Sends one test notification straight away, so you never have to wait for
+# a nightly scrape to find out whether alerts work. The result is written
+# to the run summary, which is readable without signing in.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Send a test notification
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          VAPID_SUBJECT: mailto:kim@piperocket.digital
+          SITE_URL: https://tenders.rdecosolutions.org/
+        run: |
+          pip install --quiet pywebpush
+          if [ -n "$VAPID_PRIVATE_KEY" ]; then
+            printf '%s' "$VAPID_PRIVATE_KEY" > vapid_private_key.pem
+          fi
+          python3 engine/notify.py --test
+          rm -f vapid_private_key.pem

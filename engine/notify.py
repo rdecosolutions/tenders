@@ -107,23 +107,57 @@ def send_ntfy(title: str, body: str) -> bool:
         return False
 
 
+def report(lines: list[str]) -> None:
+    """
+    Write a short status to the GitHub run summary.
+
+    The job log needs admin rights to read; the run summary does not. When
+    a notification does not arrive, this is the page that says why.
+    """
+    print("\n".join(lines))
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
+
 def main() -> int:
+    test_mode = "--test" in sys.argv
     subs_raw = os.environ.get("PUSH_SUBSCRIPTIONS", "").strip()
     key = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
     have_webpush = bool(subs_raw and key)
 
-    if not have_webpush and not os.environ.get("NTFY_TOPIC", "").strip():
-        print("No notification channel configured — skipping.")
+    has_ntfy = bool(os.environ.get("NTFY_TOPIC", "").strip())
+    if not have_webpush and not has_ntfy:
+        report([
+            "## Notifications: nothing configured",
+            "",
+            "- `PUSH_SUBSCRIPTIONS` secret set: **"
+            f"{'yes' if subs_raw else 'NO'}**",
+            f"- `VAPID_PRIVATE_KEY` secret set: **{'yes' if key else 'NO'}**",
+            "",
+            "Add the missing secret under Settings -> Secrets and variables "
+            "-> Actions. The subscription blob comes from the "
+            "**Enable notifications** button on the site.",
+        ])
         return 0
 
-    # Build the digest once and reuse it for every channel.
-    conn = connect()
-    digest = build_digest(conn)
-    conn.close()
-    if digest is None:
-        print(f"Nothing changed in the last {LOOKBACK_HOURS}h — no push sent.")
-        return 0
-    title, body = digest
+    if test_mode:
+        title = "Test notification"
+        body = ("If you can read this, notifications are working. "
+                "The real ones arrive after each nightly scrape.")
+    else:
+        # Build the digest once and reuse it for every channel.
+        conn = connect()
+        digest = build_digest(conn)
+        conn.close()
+        if digest is None:
+            report([f"## Notifications: nothing to send",
+                    "",
+                    f"No tender changed in the last {LOOKBACK_HOURS}h, so no "
+                    f"notification was sent. This is normal on a quiet day."])
+            return 0
+        title, body = digest
 
     send_ntfy(title, body)
 
@@ -142,24 +176,36 @@ def main() -> int:
     payload = json.dumps({"title": title, "body": body, "url": SITE_URL})
     subject = os.environ.get("VAPID_SUBJECT", "mailto:kim@piperocket.digital")
 
-    sent = failed = 0
-    for sub in subs:
+    sent = 0
+    problems: list[str] = []
+    for i, sub in enumerate(subs, 1):
         try:
             webpush(subscription_info=sub, data=payload,
                     vapid_private_key="vapid_private_key.pem",
                     vapid_claims={"sub": subject})
             sent += 1
         except WebPushException as exc:
-            failed += 1
             code = getattr(exc.response, "status_code", None)
             # 404/410 mean the browser threw the subscription away. It will
             # never work again — that device must re-subscribe on the site.
             if code in (404, 410):
-                print(f"  subscription expired (HTTP {code}) — that device "
-                      f"needs to press Enable notifications again")
+                problems.append(
+                    f"device {i}: subscription expired (HTTP {code}) — open "
+                    f"the site on it and press **Enable notifications** "
+                    f"again, then replace its blob in the secret")
             else:
-                print(f"  push failed: {exc}")
-    print(f"Push: {sent} sent, {failed} failed. \"{title} — {body}\"")
+                problems.append(f"device {i}: {exc}")
+
+    lines = [f"## Notifications: {sent} of {len(subs)} device(s) reached", "",
+             f'Sent: "**{title}** — {body}"'.replace("\n", " / "), ""]
+    if problems:
+        lines += ["Problems:", ""] + [f"- {p}" for p in problems] + [""]
+    if sent and not problems:
+        lines += ["If nothing appeared on the phone, the push left GitHub "
+                  "successfully — so the problem is on the device: check "
+                  "Android Settings -> Apps -> Chrome -> Notifications is on, "
+                  "and that the site is not muted in Chrome."]
+    report(lines)
     return 0
 
 

@@ -99,3 +99,5 @@ jobs:
           printf '%s' "$VAPID_PRIVATE_KEY" > vapid_private_key.pem
           python3 engine/notify.py || true
           rm -f vapid_private_key.pem
+        # notify.py writes its outcome to the run summary, so a missing
+        # notification can be diagnosed without admin access to the log.
