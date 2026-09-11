@@ -44,9 +44,17 @@
   @media (max-width:820px){.wrap{grid-template-columns:1fr}}
   .side{background:var(--panel);border:1px solid var(--line);border-radius:11px;
     padding:16px;position:sticky;top:62px}
+  .searchrow{position:relative;margin-bottom:4px}
+  .searchrow input{padding-right:30px;font-size:15px;padding-top:10px;
+    padding-bottom:10px}
+  .searchrow button{position:absolute;right:6px;top:50%;
+    transform:translateY(-50%);border:0;background:none;font-size:19px;
+    color:var(--muted);cursor:pointer;line-height:1;padding:2px 6px;
+    display:none}
+  .searchrow.has button{display:block}
   @media (max-width:820px){
     .wrap{padding:12px;gap:12px}
-    .side{padding:0 14px;position:static}
+    .side{padding:14px;position:static}
     .side summary{padding:13px 0}
     .side details[open]{padding-bottom:14px}
   }
@@ -177,7 +185,7 @@
   </div>
 </header>
 
-<div class="tabbar">
+<div class="tabbar" data-build="fb87312">
   <div class="tabs">
     <button class="tab on" id="t-tenders">Tenders</button>
     <button class="tab" id="t-alerts">Alerts</button>
@@ -207,10 +215,12 @@
 
 <div class="wrap">
   <aside class="side" id="side">
+    <div class="searchrow">
+      <input id="f-q" placeholder="Search tenders, e.g. borewell, road, Hosur">
+      <button id="q-clear" type="button" aria-label="Clear search">&times;</button>
+    </div>
     <details id="filters" open>
-    <summary>Filters</summary>
-    <label>Search</label>
-    <input id="f-q" placeholder="title, tender ID, town&hellip;">
+    <summary>More filters</summary>
     <label>Department</label><select id="f-dept"></select>
     <label>District</label><select id="f-district"></select>
     <label>Town / local body</label>
@@ -702,6 +712,8 @@ document.querySelectorAll('#side select, #side input').forEach(el =>
     timer = setTimeout(async () => {
       if (el.id === 'f-closed' && el.checked) await loadArchive();
       if (el.id === 'f-district') buildFilterOptions();
+      document.querySelector('.searchrow')
+        .classList.toggle('has', !!$('f-q').value);
       shownCount = PAGE; renderChips(); render();
     }, 120);
   }));
@@ -900,6 +912,7 @@ async function setupNotifications(){
 }
 setupNotifications();
 
+console.log('TN Tenders build fb87312');
 boot();
 </script>
 </body>
