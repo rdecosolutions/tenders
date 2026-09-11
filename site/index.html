@@ -250,6 +250,14 @@
       <input type="checkbox" id="f-novalue" style="width:auto;margin:0">
       <span>Also show tenders with no published value</span>
     </label>
+    <label>Published within</label>
+    <select id="f-published">
+      <option value="">Any time</option>
+      <option value="3">Last 3 days</option>
+      <option value="7">Last 7 days</option>
+      <option value="14">Last 14 days</option>
+      <option value="30">Last 30 days</option>
+    </select>
     <label>Closing within</label>
     <select id="f-closing">
       <option value="">Any time</option>
@@ -309,6 +317,7 @@ async function loadArchive(){
     (a.tenders || []).forEach(t => {
       t.work_list = (t.work_categories||'').split(',').filter(Boolean);
       t._d = parseDate(t.closing_date);
+      t._p = parseDate(t.published_date);
       t._closed = !!(t._d && t._d < now);
       DB.byId[t.tender_id] = t;
     });
@@ -373,6 +382,8 @@ function apply(){
   const amountFiltered = !isNaN(min) || !isNaN(max);
   let noValueHidden = 0;
   const days = $('f-closing').value ? +$('f-closing').value : null;
+  const pubDays = $('f-published').value ? +$('f-published').value : null;
+  const pubSince = pubDays ? new Date(Date.now() - pubDays*864e5) : null;
   const now = new Date();
   const horizon = days ? new Date(now.getTime() + days*864e5) : null;
   let closedHidden = 0;
@@ -399,6 +410,10 @@ function apply(){
       if (!isNaN(max) && (a === null || a > max)) return false;
     }
     if (horizon && (!t._d || t._d > horizon)) return false;
+    // Published-within is a different question from closing-within, and from
+    // the "New" flag: a tender published months ago only enters our view when
+    // its deadline nears, so it looks new to us while being old in fact.
+    if (pubSince && (!t._p || t._p < pubSince)) return false;
     if ($('f-saved').checked && !saved.has(t.tender_id)) return false;
     if (t._closed){ closedHidden++; if(!$('f-closed').checked) return false; }
     return true;
@@ -522,7 +537,8 @@ function alertCard(e){
 const FILTER_LABELS = {
   'f-q': 'Search', 'f-dept': 'Dept', 'f-district': 'District',
   'f-local': 'Town', 'f-work': 'Work', 'f-band': 'Value',
-  'f-min': 'Min', 'f-max': 'Max', 'f-closing': 'Closing within'
+  'f-min': 'Min', 'f-max': 'Max', 'f-closing': 'Closing within',
+  'f-published': 'Published within'
 };
 
 // Counts next to each option tell you where the work actually is, instead
@@ -604,7 +620,7 @@ function renderChips(){
       const shown = el.tagName === 'SELECT'
         ? el.options[el.selectedIndex].textContent
         : el.value;
-      const suffix = (id === 'f-closing' && el.value !== '1') ? ' days' : '';
+      const suffix = '';
       return '<span class="fchip">' + esc(FILTER_LABELS[id]) + ': ' +
              esc(shown) + suffix +
              '<button data-clear="' + id + '" aria-label="Remove">\u00d7</button></span>';
@@ -709,6 +725,7 @@ async function boot(){
   d.tenders.forEach(t => {
     t.work_list = (t.work_categories||'').split(',').filter(Boolean);
     t._d = parseDate(t.closing_date);
+    t._p = parseDate(t.published_date);
     t._closed = !!(t._d && t._d < now);
   });
   DB = d;
