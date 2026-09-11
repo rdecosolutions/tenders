@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS tenders (
     district        TEXT,
     local_body      TEXT,          -- town / municipality / panchayat
     org_chain       TEXT,          -- full GePNIC organisation chain
+    work_description TEXT,         -- detail-page description; the classifier
+                                   -- needs it, and without storing it a later
+                                   -- re-tag can only see the title
     circle          TEXT,          -- middle of the chain (division/circle)
     location        TEXT,          -- detail-page Location field
     pincode         TEXT,
@@ -96,7 +99,8 @@ def _table_columns(conn, table: str = "tenders") -> list[str]:
 def _migrate(conn) -> None:
     """Add any columns a database created by an older version is missing."""
     have = set(_table_columns(conn))
-    for col in ("org_chain", "circle", "location", "pincode", "opening_date"):
+    for col in ("org_chain", "circle", "location", "pincode", "opening_date",
+                "work_description"):
         if col not in have:
             conn.execute(f"ALTER TABLE tenders ADD COLUMN {col} TEXT")
     conn.commit()
@@ -250,12 +254,16 @@ def upsert(conn, t: dict) -> list[str]:
             "closing_date=?, opening_date=?, emd=?, tender_fee=?, "
             "eligibility=?, status=?, work_categories=?, district=?, "
             "local_body=?, org_chain=?, location=?, pincode=?, "
+            # Keep the stored description when this run skipped the detail
+            # page and so has nothing to offer.
+            "work_description=COALESCE(NULLIF(?,''), work_description), "
             "last_seen=?, last_hash=? WHERE tender_id=?",
             (t.get("title"), t.get("est_amount"), t.get("est_amount_raw"),
              t.get("closing_date"), t.get("opening_date"), t.get("emd"),
              t.get("tender_fee"), t.get("eligibility"), t.get("status"),
              t.get("work_categories"), t.get("district"), t.get("local_body"),
              t.get("org_chain"), t.get("location"), t.get("pincode"),
+             t.get("work_description"),
              now, new_hash, t["tender_id"]),
         )
     else:

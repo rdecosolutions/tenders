@@ -503,6 +503,7 @@ def _apply_detail(row: dict, detail: dict) -> None:
         detail.get("location", ""), row.get("org_chain", ""), row.get("title", "")
     ) or row.get("district", "")
     row["location"] = detail.get("location", "")
+    row["work_description"] = detail.get("work_description", "")
     row["pincode"] = detail.get("pincode", "")
 
     if detail.get("_has_corrigendum"):

@@ -135,7 +135,8 @@ WORK_CATEGORIES = {
         "overhead tank", "oht", "ohts", "water tank", "sintex", "sump",
         "borewell", "bore well", "bore-well", "tube well", "tubewell",
         "pipeline", "pipe line", "delivery pipeline", "head works",
-        "water tanker", "flushing", "epl work",
+        "water tanker", "flushing", "epl work", "gi pipe",
+        "distribution line", "deepening", "community well", "eri",
     ],
     "Motor & Pump Supply": [
         "motor supply", "supply of motor", "pump", "motor rewinding",
@@ -145,19 +146,25 @@ WORK_CATEGORIES = {
     "UGSS": [
         "ugss", "ugd", "underground sewer", "underground drainage",
         "sewer well", "sewerage", "sewer", "non-clog", "non clog",
-        "manhole", "man hole",
+        "manhole", "man hole", "sewage treatment", "stp", "septage",
     ],
     "Drainage": [
-        "drainage", "storm water", "storm-water", "open drain", "side drain",
-        "soak pit", "soakpit", "soakage pit", "culvert",
+        "drainage", "storm water", "storm-water", "strom water", "open drain",
+        "side drain", "soak pit", "soakpit", "soakage pit", "culvert",
+        "desilting", "de-silting", "silt removal", "gully", "main channel",
     ],
     "Roads (BT)": [
         "bt road", "bituminous", "b.t road", "black top", "blacktop",
-        "wbm", "premix",
+        "wbm", "premix", "bt patch", "bt patches", "patch work",
+        "pot hole", "pothole",
     ],
     "Roads (CC)": [
         "cc road", "c.c road", "cement concrete road", "concrete road",
         "cement concrete pavement",
+    ],
+    "Roads (General)": [
+        "road work", "road works", "improvements road", "road from",
+        "link road", "approach road", "street work",
     ],
     "Roads (Paver Block)": [
         "paver block", "paver-block", "interlocking", "paving block",
@@ -178,6 +185,8 @@ WORK_CATEGORIES = {
         "sanitary worker", "sanitary workers", "public health",
         "domestic breeding checker", "dbc", "conservancy", "toilet",
         "public toilet", "fogging", "anti larval",
+        "sanitary complex", "community sanitary", "mini csc", "csc",
+        "fstp", "faecal sludge",
     ],
     "Buildings": [
         "building", "school building", "hostel building", "community hall",
@@ -187,10 +196,40 @@ WORK_CATEGORIES = {
     "Civil Works": [
         "civil work", "compound wall", "renovation", "repair", "repairs",
         "rcc", "reinforced cement concrete", "construction of",
-        "constraction of", "improvement", "restoration", "strengthening",
-        "dismantling", "dismanling", "raising",
+        "constraction of", "constuction of", "const of", "improvement",
+        "improvements", "upgradation", "restoration", "strengthening",
+        "dismantling", "dismanling", "raising", "reconstruction",
+        "landscape", "sluice",
     ],
-    # Recurring procurement clusters that are not "works" at all. These two
+    # Municipalities put their shop and market lettings out to tender too.
+    # This was the single biggest untagged cluster in MAWS — hundreds of
+    # "Rental Charges for Block F Shop No 49" — and it is not construction
+    # at all, so a contractor almost certainly wants to filter it OUT.
+    "Shop & Property Rental": [
+        "shop", "shops", "rental charges", "monthly rent", "daily market",
+        "vegetable market", "lease", "licence fee", "license fee",
+        "license to charge", "parking lot", "bus stand", "market stall",
+        "rent for", "auction of", "e-auction", "allotment of space",
+    ],
+    "Street Lighting": [
+        "street light", "streetlight", "street lamp", "lamp post",
+        "led fitting", "high mast", "solar light",
+    ],
+    "Electrical Works": [
+        "electrical maintenance", "electrical work", "electrical works",
+        "wiring", "transformer", "air conditioner", "ac unit",
+        "annual maintenance contract", "amc", "erection",
+    ],
+    "Consultancy & Surveys": [
+        "consultancy", "consultancy services", "request for proposal", "rfp",
+        "detailed project report", "dpr", "feasibility", "conduct of survey",
+    ],
+    "IT & Software": [
+        "software", "antivirus", "anti virus", "computer", "e-governance",
+        "end point security", "server", "website",
+    ],
+
+    # Recurring procurement clusters that are not "works" at all. These
     # categories are NOT in the original Proposed Flow doc — they were added
     # because together they are a big slice of real DTP/municipal tenders.
     # Rename or drop them if the flow doc's taxonomy should stay closed.
