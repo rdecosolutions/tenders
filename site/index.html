@@ -78,6 +78,9 @@
   .badge.extended{background:var(--extended)}
   .badge.retendered{background:var(--retendered)}
   .badge.cancelled{background:var(--cancelled)}
+  button.more{width:100%;padding:12px;margin:4px 0 16px;border-radius:9px;
+    border:1px solid var(--line);background:var(--panel);color:var(--accent);
+    font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
   .empty{background:var(--panel);border:1px dashed var(--line);
     border-radius:11px;padding:36px;text-align:center;color:var(--muted)}
   .note{font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.5}
@@ -170,6 +173,10 @@ const esc = s => (s||'').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money = v => v ? '\u20B9' + v : '\u2014';
 let DB = {tenders:[], events:[]}, view = 'tenders';
+// Rendering every match at once built a 200,000px-tall page on a phone:
+// scrolling stuttered and taps lagged. Render a screenful at a time.
+const PAGE = 40;
+let shownCount = PAGE;
 
 const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,
                 jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
@@ -276,23 +283,34 @@ function alertCard(e){
 function render(){
   const main = $('main');
   if (view === 'alerts'){
-    const ev = DB.events.slice(0, 300);
+    const ev = DB.events.slice(0, shownCount);
     main.innerHTML = ev.length
       ? '<p class="count">' + DB.events.length + ' change' +
-        (DB.events.length===1?'':'s') + ' recorded</p>' + ev.map(alertCard).join('')
+        (DB.events.length===1?'':'s') + ' recorded \u00b7 showing ' +
+        ev.length + '</p>' + ev.map(alertCard).join('') +
+        (DB.events.length > ev.length
+          ? '<button class="more" id="more">Show ' +
+            Math.min(PAGE, DB.events.length - ev.length) + ' more</button>' : '')
       : '<div class="empty">No changes recorded yet.</div>';
+    const m = $('more');
+    if (m) m.onclick = () => { shownCount += PAGE; render(); };
     return;
   }
   const {out, closedHidden} = apply();
-  const shown = out.slice(0, 400);
+  const shown = out.slice(0, shownCount);
   main.innerHTML = shown.length
     ? '<p class="count">' + out.length.toLocaleString() + ' tender' +
       (out.length===1?'':'s') +
-      (out.length > shown.length ? ' \u00b7 showing first ' + shown.length : '') +
+      (out.length > shown.length ? ' \u00b7 showing ' + shown.length : '') +
       (closedHidden && !$('f-closed').checked
         ? ' \u00b7 ' + closedHidden + ' closed hidden' : '') +
-      '</p>' + shown.map(tenderCard).join('')
+      '</p>' + shown.map(tenderCard).join('') +
+      (out.length > shown.length
+        ? '<button class="more" id="more">Show ' +
+          Math.min(PAGE, out.length - shown.length) + ' more</button>' : '')
     : '<div class="empty">Nothing matches those filters.</div>';
+  const more = $('more');
+  if (more) more.onclick = () => { shownCount += PAGE; render(); };
 }
 
 async function boot(){
@@ -339,7 +357,8 @@ async function boot(){
 let timer;
 document.querySelectorAll('#side select, #side input').forEach(el =>
   el.addEventListener('input', () => {
-    clearTimeout(timer); timer = setTimeout(render, 120);
+    clearTimeout(timer);
+    timer = setTimeout(() => { shownCount = PAGE; render(); }, 120);
   }));
 $('f-clear').onclick = () => {
   document.querySelectorAll('#side select, #side input').forEach(el => {
@@ -349,6 +368,7 @@ $('f-clear').onclick = () => {
 };
 function setView(v){
   view = v;
+  shownCount = PAGE;
   $('t-tenders').classList.toggle('on', v === 'tenders');
   $('t-alerts').classList.toggle('on', v === 'alerts');
   $('side').style.opacity = v === 'alerts' ? .45 : 1;
