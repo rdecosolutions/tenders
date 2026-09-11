@@ -33,6 +33,9 @@ jobs:
         run: |
           python3 engine/export.py --restore
           python3 engine/export.py --dump
+      - name: Check the page structure
+        run: python3 site/check_layout.py site/index.html
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

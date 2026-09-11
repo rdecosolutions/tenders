@@ -41,6 +41,12 @@
   @media (max-width:820px){.wrap{grid-template-columns:1fr}}
   .side{background:var(--panel);border:1px solid var(--line);border-radius:11px;
     padding:16px;position:sticky;top:76px}
+  @media (max-width:820px){
+    .wrap{padding:12px;gap:12px}
+    .side{padding:0 14px;position:static}
+    .side summary{padding:13px 0}
+    .side details[open]{padding-bottom:14px}
+  }
   .side summary{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
     color:var(--muted);cursor:pointer;list-style:none;font-weight:650;
     display:flex;align-items:center;justify-content:space-between}
@@ -82,8 +88,8 @@
   .closing.urgent{color:var(--cancelled)}
   .act{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
     margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}
-  .act code{font-size:12px;background:var(--bg);padding:4px 8px;
-    border-radius:5px;border:1px solid var(--line)}
+  .act code{font-size:12px;color:var(--muted);background:none;border:0;
+    padding:0;font-family:ui-monospace,Menlo,monospace}
   .act button,.act a{font-size:12.5px;padding:6px 11px;border-radius:6px;
     border:1px solid var(--line);background:transparent;color:var(--accent);
     cursor:pointer;text-decoration:none;font-family:inherit;font-weight:550}
@@ -97,12 +103,25 @@
   code{background:var(--accent-soft);padding:1px 5px;border-radius:4px;
     font-size:12px}
 
-  .notif{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
-  .notif button{width:100%;padding:9px;border-radius:7px;cursor:pointer;
+  .bell{font-size:15px;line-height:1;padding:7px 10px}
+  .sheet{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);
+    display:flex;align-items:flex-end;justify-content:center}
+  .sheet[hidden]{display:none}
+  .sheet-inner{background:var(--panel);width:100%;max-width:460px;
+    border-radius:14px 14px 0 0;padding:20px 18px 26px;position:relative}
+  @media (min-width:560px){
+    .sheet{align-items:center}
+    .sheet-inner{border-radius:14px}
+  }
+  .sheet-inner h2{font-size:15px;margin:0 0 14px}
+  .sheet-x{position:absolute;top:10px;right:12px;border:0;background:none;
+    font-size:22px;line-height:1;color:var(--muted);cursor:pointer}
+  .sheet-inner button#notif-btn{width:100%;padding:9px;border-radius:7px;cursor:pointer;
     border:1px solid var(--accent);background:var(--accent-soft);
     color:var(--accent);font-size:13px;font-weight:600;font-family:inherit}
-  .notif button[disabled]{opacity:.55;cursor:default}
-  .notif p{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.45}
+  .sheet-inner button#notif-btn[disabled]{opacity:.55;cursor:default}
+  .sheet-inner > p, #notif-msg{font-size:12.5px;color:var(--muted);
+    margin:9px 0 0;line-height:1.5}
   #sub-out{display:none;margin-top:10px}
   #sub-out summary{font-size:12.5px;color:var(--accent);cursor:pointer;
     font-weight:600;padding:4px 0}
@@ -125,8 +144,27 @@
   <div class="tabs">
     <button class="tab on" id="t-tenders">Tenders</button>
     <button class="tab" id="t-alerts">Alerts</button>
+    <button class="tab bell" id="bell" title="Alerts on this device"
+            aria-label="Notification settings">&#128276;</button>
   </div>
 </header>
+
+<div class="sheet" id="notif-sheet" hidden>
+  <div class="sheet-inner">
+    <button class="sheet-x" id="notif-close" aria-label="Close">&times;</button>
+    <h2>Alerts on this device</h2>
+    <button id="notif-btn">Enable notifications</button>
+    <p id="notif-msg">Get an alert on this phone or laptop when new tenders
+      appear.</p>
+    <details id="sub-out">
+      <summary>Setup code for this device</summary>
+      <p>The site owner needs this once, to switch alerts on for this
+        device. Copy it and send it to them.</p>
+      <textarea id="sub-json" readonly></textarea>
+      <button id="sub-copy" style="margin-top:6px">Copy</button>
+    </details>
+  </div>
+</div>
 
 <div class="wrap">
   <aside class="side" id="side">
@@ -157,18 +195,6 @@
     </label>
     <button class="clear" id="f-clear">Clear filters</button>
     </details>
-    <div class="notif">
-      <button id="notif-btn">Enable notifications</button>
-      <p id="notif-msg">Get a notification on this device when new tenders
-        appear.</p>
-      <details id="sub-out">
-        <summary>Setup code for this device</summary>
-        <p>The site owner needs this once, to switch alerts on for this
-          phone or laptop. Copy it and send it to them.</p>
-        <textarea id="sub-json" readonly></textarea>
-        <button id="sub-copy" style="margin-top:6px">Copy</button>
-      </details>
-    </div>
     <div class="note" id="alert-note" style="display:none">
       Changes the engine spotted, newest first. Refreshed nightly.
     </div>
@@ -435,6 +461,14 @@ document.addEventListener('click', e => {
   if (navigator.clipboard) navigator.clipboard.writeText(id).then(done).catch(done);
   else done();
 });
+const sheet = $('notif-sheet');
+$('bell').onclick = () => { sheet.hidden = false; };
+$('notif-close').onclick = () => { sheet.hidden = true; };
+sheet.onclick = e => { if (e.target === sheet) sheet.hidden = true; };
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') sheet.hidden = true;
+});
+
 $('t-tenders').onclick = () => setView('tenders');
 $('t-alerts').onclick = () => setView('alerts');
 if (window.matchMedia('(max-width:820px)').matches) $('filters').open = false;
