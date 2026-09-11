@@ -25,12 +25,15 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-  header{background:var(--panel);border-bottom:1px solid var(--line);
-    padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;
-    position:sticky;top:0;z-index:10}
+  /* The title block scrolls away; only the slim tab strip stays pinned,
+     so a phone keeps its screen for tenders rather than for a banner. */
+  header{background:var(--panel);padding:14px 20px 12px}
+  .tabbar{background:var(--panel);border-bottom:1px solid var(--line);
+    padding:8px 20px;position:sticky;top:0;z-index:20}
+  .tabs{display:flex;gap:6px;max-width:1400px;margin:0 auto}
   h1{font-size:17px;margin:0;font-weight:640;letter-spacing:-.01em}
   .sub{color:var(--muted);font-size:13px}
-  .tabs{margin-left:auto;display:flex;gap:6px}
+
   .tab{padding:7px 14px;border:1px solid var(--line);background:transparent;
     color:var(--muted);border-radius:7px;cursor:pointer;font-size:13.5px;
     font-weight:550}
@@ -40,7 +43,7 @@
     padding:20px;align-items:start;max-width:1400px;margin:0 auto}
   @media (max-width:820px){.wrap{grid-template-columns:1fr}}
   .side{background:var(--panel);border:1px solid var(--line);border-radius:11px;
-    padding:16px;position:sticky;top:76px}
+    padding:16px;position:sticky;top:62px}
   @media (max-width:820px){
     .wrap{padding:12px;gap:12px}
     .side{padding:0 14px;position:static}
@@ -103,6 +106,25 @@
   code{background:var(--accent-soft);padding:1px 5px;border-radius:4px;
     font-size:12px}
 
+  .tag{font-size:12.5px;color:var(--muted);margin-top:3px;max-width:52ch}
+  .lakh{font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
+  .chipbar{grid-column:2;display:flex;flex-wrap:wrap;gap:7px;margin-bottom:2px}
+  @media (max-width:820px){.chipbar{grid-column:1}}
+  .chipbar:empty{display:none}
+  .fchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
+    padding:5px 9px;border-radius:99px;background:var(--accent-soft);
+    color:var(--accent);font-weight:550}
+  .fchip button{border:0;background:none;color:inherit;cursor:pointer;
+    font-size:14px;line-height:1;padding:0;opacity:.7}
+  .fchip.clear{background:transparent;border:1px solid var(--line);
+    color:var(--muted);cursor:pointer}
+  .empty button{margin-top:12px;padding:9px 16px;border-radius:8px;
+    border:1px solid var(--accent);background:var(--accent-soft);
+    color:var(--accent);font-weight:600;cursor:pointer;font-family:inherit}
+  .sheet-inner button#install-btn{width:100%;padding:9px;border-radius:7px;
+    border:1px solid var(--accent);background:var(--accent-soft);
+    color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;
+    font-family:inherit;margin-bottom:14px}
   .bell{font-size:15px;line-height:1;padding:7px 10px}
   .sheet{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);
     display:flex;align-items:flex-end;justify-content:center}
@@ -140,19 +162,26 @@
   <div>
     <h1>Tamil Nadu Tenders</h1>
     <div class="sub" id="hdr">loading&hellip;</div>
+    <div class="tag">Live government tenders for water, roads, drainage,
+      buildings and supplies across all 38 districts.</div>
   </div>
+</header>
+
+<div class="tabbar">
   <div class="tabs">
     <button class="tab on" id="t-tenders">Tenders</button>
     <button class="tab" id="t-alerts">Alerts</button>
     <button class="tab bell" id="bell" title="Alerts on this device"
             aria-label="Notification settings">&#128276;</button>
   </div>
-</header>
+</div>
 
 <div class="sheet" id="notif-sheet" hidden>
   <div class="sheet-inner">
     <button class="sheet-x" id="notif-close" aria-label="Close">&times;</button>
     <h2>Alerts on this device</h2>
+    <button id="install-btn" hidden>Add to home screen</button>
+    <p id="install-msg" hidden>Installs like an app, with its own icon.</p>
     <button id="notif-btn">Enable notifications</button>
     <p id="notif-msg">Get an alert on this phone or laptop when new tenders
       appear.</p>
@@ -176,10 +205,16 @@
     <label>District</label><select id="f-district"></select>
     <label>Local body</label><select id="f-local"></select>
     <label>Work type</label><select id="f-work"></select>
-    <label>Estimated amount (&#8377;)</label>
+    <label>Sort by</label>
+    <select id="f-sort">
+      <option value="closing">Closing soonest</option>
+      <option value="newest">Recently published</option>
+      <option value="value">Highest value</option>
+    </select>
+    <label>Estimated value (&#8377;) <span class="lakh">1 lakh = 1,00,000</span></label>
     <div class="row2">
-      <input id="f-min" type="number" placeholder="min">
-      <input id="f-max" type="number" placeholder="max">
+      <input id="f-min" type="number" placeholder="min" inputmode="numeric">
+      <input id="f-max" type="number" placeholder="max" inputmode="numeric">
     </div>
     <label>Closing within</label>
     <select id="f-closing">
@@ -199,6 +234,7 @@
       Changes the engine spotted, newest first. Refreshed nightly.
     </div>
   </aside>
+  <div id="chips" class="chipbar"></div>
   <main id="main"><div class="empty">Loading tenders&hellip;</div></main>
 </div>
 
@@ -265,8 +301,16 @@ function apply(){
     if (t._closed){ closedHidden++; if(!$('f-closed').checked) return false; }
     return true;
   });
-  out.sort((a,b) => (a._closed - b._closed) ||
-    ((a._d ? a._d.getTime() : 8.64e15) - (b._d ? b._d.getTime() : 8.64e15)));
+  const sort = $('f-sort').value;
+  if (sort === 'value'){
+    out.sort((a,b) => (a._closed - b._closed) || (amount(b)||0) - (amount(a)||0));
+  } else if (sort === 'newest'){
+    const pub = t => parseDate(t.published_date)?.getTime() || 0;
+    out.sort((a,b) => (a._closed - b._closed) || pub(b) - pub(a));
+  } else {
+    out.sort((a,b) => (a._closed - b._closed) ||
+      ((a._d ? a._d.getTime() : 8.64e15) - (b._d ? b._d.getTime() : 8.64e15)));
+  }
   return {out, closedHidden};
 }
 
@@ -355,6 +399,50 @@ function alertCard(e){
     '</dl></article>';
 }
 
+const FILTER_LABELS = {
+  'f-q': 'Search', 'f-dept': 'Dept', 'f-district': 'District',
+  'f-local': 'Local body', 'f-work': 'Work', 'f-min': 'Min',
+  'f-max': 'Max', 'f-closing': 'Closing within'
+};
+
+function renderChips(){
+  const bar = $('chips');
+  const active = Object.keys(FILTER_LABELS)
+    .filter(id => $(id).value)
+    .map(id => {
+      const el = $(id);
+      const shown = el.tagName === 'SELECT'
+        ? el.options[el.selectedIndex].textContent
+        : el.value;
+      const suffix = (id === 'f-closing') ? ' days' : '';
+      return '<span class="fchip">' + esc(FILTER_LABELS[id]) + ': ' +
+             esc(shown) + suffix +
+             '<button data-clear="' + id + '" aria-label="Remove">\u00d7</button></span>';
+    });
+  if ($('f-closed').checked)
+    active.push('<span class="fchip">Including closed' +
+      '<button data-clear="f-closed" aria-label="Remove">\u00d7</button></span>');
+  bar.innerHTML = active.length
+    ? active.join('') +
+      '<button class="fchip clear" id="clear-all">Clear all</button>'
+    : '';
+  bar.querySelectorAll('[data-clear]').forEach(b => b.onclick = () => {
+    const el = $(b.dataset.clear);
+    if (el.type === 'checkbox') el.checked = false; else el.value = '';
+    shownCount = PAGE; renderChips(); render();
+  });
+  const ca = $('clear-all');
+  if (ca) ca.onclick = () => { clearAll(); };
+}
+
+function clearAll(){
+  document.querySelectorAll('#side select, #side input').forEach(el => {
+    if (el.type === 'checkbox') el.checked = false;
+    else if (el.id !== 'f-sort') el.value = '';
+  });
+  shownCount = PAGE; renderChips(); render();
+}
+
 function render(){
   const main = $('main');
   if (view === 'alerts'){
@@ -383,7 +471,10 @@ function render(){
       (out.length > shown.length
         ? '<button class="more" id="more">Show ' +
           Math.min(PAGE, out.length - shown.length) + ' more</button>' : '')
-    : '<div class="empty">Nothing matches those filters.</div>';
+    : '<div class="empty">No tenders match these filters.' +
+      '<br><button id="empty-clear">Clear all filters</button></div>';
+  const ec = $('empty-clear');
+  if (ec) ec.onclick = () => clearAll();
   const more = $('more');
   if (more) more.onclick = () => { shownCount += PAGE; render(); };
 }
@@ -435,7 +526,7 @@ let timer;
 document.querySelectorAll('#side select, #side input').forEach(el =>
   el.addEventListener('input', () => {
     clearTimeout(timer);
-    timer = setTimeout(() => { shownCount = PAGE; render(); }, 120);
+    timer = setTimeout(() => { shownCount = PAGE; renderChips(); render(); }, 120);
   }));
 $('f-clear').onclick = () => {
   document.querySelectorAll('#side select, #side input').forEach(el => {
@@ -448,8 +539,8 @@ function setView(v){
   shownCount = PAGE;
   $('t-tenders').classList.toggle('on', v === 'tenders');
   $('t-alerts').classList.toggle('on', v === 'alerts');
-  $('side').style.opacity = v === 'alerts' ? .45 : 1;
-  $('side').style.pointerEvents = v === 'alerts' ? 'none' : 'auto';
+  $('side').hidden = (v === 'alerts');
+  $('chips').hidden = (v === 'alerts');
   $('alert-note').style.display = v === 'alerts' ? 'block' : 'none';
   render();
 }
@@ -461,6 +552,38 @@ document.addEventListener('click', e => {
   if (navigator.clipboard) navigator.clipboard.writeText(id).then(done).catch(done);
   else done();
 });
+// ---- Install as an app -------------------------------------------------
+// Chrome fires beforeinstallprompt when the site qualifies (manifest, icons,
+// service worker, HTTPS). We stash it and show our own button, because the
+// browser's own banner is easy to miss.
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+  $('install-btn').hidden = false;
+  $('install-msg').hidden = false;
+});
+$('install-btn').onclick = async () => {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  const { outcome } = await deferredInstall.userChoice;
+  deferredInstall = null;
+  $('install-btn').hidden = true;
+  $('install-msg').textContent = outcome === 'accepted'
+    ? 'Installed. Look for the icon on your home screen.'
+    : 'Not installed. You can add it any time from the browser menu.';
+};
+window.addEventListener('appinstalled', () => {
+  $('install-btn').hidden = true;
+  $('install-msg').hidden = false;
+  $('install-msg').textContent = 'Installed on this device.';
+});
+// Already running as an installed app? Then say so instead of offering.
+if (window.matchMedia('(display-mode: standalone)').matches){
+  $('install-msg').hidden = false;
+  $('install-msg').textContent = 'Running as an installed app.';
+}
+
 const sheet = $('notif-sheet');
 $('bell').onclick = () => { sheet.hidden = false; };
 $('notif-close').onclick = () => { sheet.hidden = true; };
