@@ -584,11 +584,15 @@ def scrape(
         try:
             _open_listing(page, window)
 
-            total = total_pages(page)
-            if reverse and total > 1:
+            total = 0
+            if reverse:
                 last = page.query_selector(SELECTORS["last_link"])
                 if last is not None and _click_and_wait(page, last):
-                    say(f"walking backwards from the last page of {total}")
+                    # Read the count AFTER jumping: the pager only ever shows
+                    # a window of about seven numbers, so reading it on page
+                    # one reports "7 pages" for a 506-page listing.
+                    total = total_pages(page)
+                    say(f"walking backwards from page {total} of {total}")
                 else:
                     reverse = False
                     say("could not jump to the last page — walking forwards")
@@ -636,12 +640,20 @@ def scrape(
                         + (f" of {total}" if total else ""))
                     break
                 if not _click_and_wait(page, nxt):
-                    # One retry: a blip on the "next" click would otherwise
-                    # silently truncate the run at whatever page we reached.
-                    say(f"page {page_num + 1} did not load — retrying")
-                    time.sleep(THROTTLE_SECONDS * 4)
-                    nxt = page.query_selector(SELECTORS["next_link"])
-                    if nxt is None or not _click_and_wait(page, nxt):
+                    # The portal drops the odd page under sustained walking,
+                    # and one retry was not enough: sweeps were giving up
+                    # after a handful of pages. Back off progressively and
+                    # try several times before accepting the loss.
+                    ok = False
+                    for attempt in range(1, 5):
+                        say(f"page after {walked} did not load — "
+                            f"retry {attempt}/4")
+                        time.sleep(THROTTLE_SECONDS * 3 * attempt)
+                        nxt = page.query_selector(step_link)
+                        if nxt is not None and _click_and_wait(page, nxt):
+                            ok = True
+                            break
+                    if not ok:
                         # Say how much of the window we actually covered.
                         # Silently stopping at a fifth of the pages is how
                         # newly published tenders went missing for two days
