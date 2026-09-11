@@ -93,9 +93,10 @@
     margin-top:13px;padding-top:12px;border-top:1px solid var(--line)}
   .act code{font-size:12px;color:var(--muted);background:none;border:0;
     padding:0;font-family:ui-monospace,Menlo,monospace}
-  .act button,.act a{font-size:12.5px;padding:6px 11px;border-radius:6px;
+  .act button{font-size:12.5px;padding:7px 12px;border-radius:6px;
     border:1px solid var(--line);background:transparent;color:var(--accent);
-    cursor:pointer;text-decoration:none;font-family:inherit;font-weight:550}
+    cursor:pointer;font-family:inherit;font-weight:550}
+  .act button.findit{background:var(--accent-soft);border-color:var(--accent)}
   .hint{font-size:12px;color:var(--muted);margin:9px 0 0}
   button.more{width:100%;padding:12px;margin:4px 0 16px;border-radius:9px;
     border:1px solid var(--line);background:var(--panel);color:var(--accent);
@@ -368,12 +369,14 @@ function tenderCard(t){
     '</dl>' +
     '<div class="act">' +
       '<code>' + esc(t.tender_id) + '</code>' +
+      '<button class="findit" data-id="' + esc(t.tender_id) + '">' +
+        'Copy ID &amp; find on portal \u2197</button>' +
       '<button class="copyid" data-id="' + esc(t.tender_id) + '">Copy ID</button>' +
-      '<a href="https://tntenders.gov.in/nicgep/app" target="_blank" ' +
-        'rel="noopener">Open portal \u2197</a>' +
     '</div>' +
-    '<p class="hint">To bid: open the portal, go to <b>Search</b>, and paste ' +
-      'this Tender ID.</p>' +
+    '<p class="hint">The portal has no direct link to a single tender, so ' +
+      'this copies the ID and opens its <b>Active Tenders</b> search. ' +
+      'Paste into the <b>Tender ID</b> box, type the captcha, press ' +
+      '<b>Search</b>.</p>' +
   '</article>';
 }
 
@@ -544,13 +547,32 @@ function setView(v){
   $('alert-note').style.display = v === 'alerts' ? 'block' : 'none';
   render();
 }
+const PORTAL_SEARCH =
+  'https://tntenders.gov.in/nicgep/app?page=FrontEndLatestActiveTenders&service=page';
+
+function copyText(text){
+  if (navigator.clipboard) return navigator.clipboard.writeText(text).catch(()=>{});
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch(_) {}
+  ta.remove();
+  return Promise.resolve();
+}
+
 document.addEventListener('click', e => {
-  const b = e.target.closest('.copyid');
+  const find = e.target.closest('.findit');
+  const copy = e.target.closest('.copyid');
+  const b = find || copy;
   if (!b) return;
   const id = b.dataset.id;
-  const done = () => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy ID', 1500); };
-  if (navigator.clipboard) navigator.clipboard.writeText(id).then(done).catch(done);
-  else done();
+  // Open first, inside the click, or the popup blocker stops it.
+  if (find) window.open(PORTAL_SEARCH, '_blank', 'noopener');
+  const label = b.textContent;
+  copyText(id).then(() => {
+    b.textContent = 'ID copied';
+    setTimeout(() => { b.innerHTML = label; }, 1800);
+  });
 });
 // ---- Install as an app -------------------------------------------------
 // Chrome fires beforeinstallprompt when the site qualifies (manifest, icons,
