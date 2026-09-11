@@ -368,7 +368,11 @@ function apply(){
   const out = DB.tenders.filter(t => {
     if (dept && t.department !== dept) return false;
     if (dist && t.district !== dist) return false;
-    if (local && t.local_body !== local) return false;
+    // Substring, not exact: this is a type-to-search box, so "Hosur" must
+    // find "Hosur Municipality". Exact matching made it look like a search
+    // field that silently returned nothing.
+    if (local && !(t.local_body||'').toLowerCase()
+                   .includes(local.toLowerCase())) return false;
     if (work && !(t.work_list||[]).includes(work)) return false;
     if (q && !((t.title||'') + ' ' + (t.tender_id||'') + ' ' +
                (t.local_body||'') + ' ' + (t.ref_number||''))
