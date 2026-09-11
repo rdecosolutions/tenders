@@ -66,6 +66,9 @@ SELECTORS = {
     "results_table": "table#table",
     "row_link": "a[id^='DirectLink']",
     "next_link": "#linkFwd",
+    "prev_link": "#linkBack",
+    "last_link": "#linkLast",
+    "page_links": "a[id^='linkPage']",
     # Detail page renders as <td class="td_caption">label</td>
     #                        <td class="td_field">value</td>
     "detail_cells": "td.td_caption, td.td_field",
@@ -530,17 +533,38 @@ def _apply_detail(row: dict, detail: dict) -> None:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+def total_pages(page) -> int:
+    """Highest page number the pager offers, or 0 if it cannot be read."""
+    nums = []
+    for el in page.query_selector_all(SELECTORS["page_links"]):
+        try:
+            nums.append(int(el.inner_text().strip()))
+        except ValueError:
+            continue
+    return max(nums) if nums else 0
+
+
 def scrape(
     headless: bool = True,
     max_pages: int = 1000,
     window: str = "14",
     needs_detail: Optional[Callable[[dict], bool]] = None,
     progress: Optional[Callable[[str], None]] = None,
+    reverse: bool = True,
 ) -> Iterator[dict]:
     """
     Yield raw tender dicts from every page of the closing-date listing.
 
     window        "today" | "7" | "14"  (14 is the widest CAPTCHA-free view)
+    reverse       Walk from the LAST page backwards. The portal sorts by
+                  closing date, so a tender published today sits at the far
+                  end of the window and lands on the final pages. Walking
+                  forwards meant that if a run stopped early -- and on
+                  GitHub's runners they were stopping around page 100 of 506
+                  -- the pages we never reached were exactly the newly
+                  published tenders. Truncating from the other end costs us
+                  only tenders closing within days, which earlier runs have
+                  already recorded.
     needs_detail  callback returning True if this row's detail page should be
                   fetched. main.py answers "yes" for tenders that are new or
                   whose listing fields changed, so a steady-state daily run
@@ -560,6 +584,17 @@ def scrape(
         try:
             _open_listing(page, window)
 
+            total = total_pages(page)
+            if reverse and total > 1:
+                last = page.query_selector(SELECTORS["last_link"])
+                if last is not None and _click_and_wait(page, last):
+                    say(f"walking backwards from the last page of {total}")
+                else:
+                    reverse = False
+                    say("could not jump to the last page — walking forwards")
+            step_link = SELECTORS["prev_link"] if reverse else SELECTORS["next_link"]
+
+            walked = 0
             page_num = 1
             while page_num <= max_pages:
                 try:
@@ -594,9 +629,11 @@ def scrape(
                         time.sleep(THROTTLE_SECONDS)
                     yield row
 
-                nxt = page.query_selector(SELECTORS["next_link"])
+                walked += 1
+                nxt = page.query_selector(step_link)
                 if nxt is None:
-                    say(f"reached the last page ({page_num})")
+                    say(f"reached the end of the listing after {walked} pages"
+                        + (f" of {total}" if total else ""))
                     break
                 if not _click_and_wait(page, nxt):
                     # One retry: a blip on the "next" click would otherwise
@@ -605,8 +642,14 @@ def scrape(
                     time.sleep(THROTTLE_SECONDS * 4)
                     nxt = page.query_selector(SELECTORS["next_link"])
                     if nxt is None or not _click_and_wait(page, nxt):
-                        say(f"pagination stalled after page {page_num} — "
-                            f"stopping early, next run will pick up the rest")
+                        # Say how much of the window we actually covered.
+                        # Silently stopping at a fifth of the pages is how
+                        # newly published tenders went missing for two days
+                        # while every run reported success.
+                        pct = f" ({100 * walked // total}% of {total} pages)" \
+                            if total else ""
+                        say(f"INCOMPLETE SWEEP: stopped after {walked} "
+                            f"pages{pct}. Some tenders were not seen.")
                         break
                 page_num += 1
                 time.sleep(THROTTLE_SECONDS)

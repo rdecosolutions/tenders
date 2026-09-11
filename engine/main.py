@@ -103,8 +103,17 @@ def run(headless: bool = True,
 
     say = (lambda m: print(f"  {m}", file=sys.stderr)) if verbose else None
 
+    notes: list[str] = []
+
+    def say_and_keep(msg: str) -> None:
+        if say:
+            say(msg)
+        if "INCOMPLETE" in msg or "reached the end" in msg:
+            notes.append(msg)
+
     for raw in scrape(headless=headless, max_pages=max_pages, window=window,
-                      needs_detail=needs_detail, progress=say):
+                      needs_detail=needs_detail, progress=say_and_keep,
+                      reverse=True):
         counts["scanned"] += 1
 
         if not in_scope(raw):
@@ -141,6 +150,7 @@ def run(headless: bool = True,
             counts[ev] = counts.get(ev, 0) + 1
 
     conn.close()
+    counts["notes"] = notes
     return counts
 
 

@@ -47,7 +47,7 @@ jobs:
         run: python3 engine/export.py --restore
 
       - name: Scrape
-        run: python3 engine/main.py
+        run: python3 engine/main.py | tee "$GITHUB_STEP_SUMMARY"
 
       # When the scrape fails, say WHY somewhere readable without signing
       # in. The job log requires admin rights; the run summary does not.
