@@ -384,9 +384,7 @@ function apply(){
     if (local && !(t.local_body||'').toLowerCase()
                    .includes(local.toLowerCase())) return false;
     if (work && !(t.work_list||[]).includes(work)) return false;
-    if (q && !((t.title||'') + ' ' + (t.tender_id||'') + ' ' +
-               (t.local_body||'') + ' ' + (t.ref_number||''))
-               .toLowerCase().includes(q)) return false;
+    if (q && !searchHit(t, q)) return false;
     const a = amount(t);
     if (amountFiltered && a === null){
       // The portal publishes no value for ~19% of tenders. Silently dropping
@@ -563,6 +561,27 @@ function buildFilterOptions(){
 
 function updateSavedCount(){
   $('saved-n').textContent = saved.size ? '(' + saved.size + ')' : '';
+}
+
+// Search used to look only at title, tender id, town and reference number,
+// and matched the whole phrase as one string. So "Rural Development"
+// returned nothing at all -- the department lives in org_chain -- and any
+// two words in the wrong order returned nothing. It now covers everything
+// a person can see on the card, and requires each word to appear somewhere
+// rather than the exact phrase.
+const SEARCH_FIELDS = ['title', 'tender_id', 'ref_number', 'local_body',
+  'district', 'org_chain', 'work_categories', 'work_description',
+  'location', 'department'];
+
+function haystack(t){
+  if (t._hay === undefined)
+    t._hay = SEARCH_FIELDS.map(f => t[f] || '').join(' ').toLowerCase();
+  return t._hay;
+}
+
+function searchHit(t, q){
+  const hay = haystack(t);
+  return q.split(/\s+/).filter(Boolean).every(w => hay.includes(w));
 }
 
 function bandRange(){
