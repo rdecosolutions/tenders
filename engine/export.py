@@ -30,7 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from store import connect
@@ -39,6 +39,15 @@ ROOT = Path(__file__).resolve().parent.parent
 TENDERS_NDJSON = ROOT / "data" / "tenders.ndjson"
 EVENTS_NDJSON = ROOT / "data" / "events.ndjson"
 SITE_DATA = ROOT / "site" / "data.json"
+SITE_ARCHIVE = ROOT / "site" / "archive.json"
+
+# Open tenders stay at roughly the size of the scraper's 14-day window;
+# closed ones pile up forever. Within a year they would be ~80% of what
+# every visitor downloads, none of it biddable. So recently-closed stays in
+# the main payload and the rest moves to an archive the page fetches only
+# if someone asks for it. Nothing is discarded -- the full history is in
+# data/tenders.ndjson either way.
+ARCHIVE_AFTER_DAYS = 30
 
 # Kept out of the published site: an internal fingerprint nobody needs.
 SITE_SKIP = {"last_hash"}
@@ -86,21 +95,42 @@ def dump(conn) -> dict:
                   if not (e.get("event_type") == "NEW"
                           and (e.get("created_at") or "")[:10] in backfill_days)]
 
+    slim = [{k: v for k, v in t.items() if k not in SITE_SKIP} for t in tenders]
+    horizon = datetime.now() - timedelta(days=ARCHIVE_AFTER_DAYS)
+    live, archive = [], []
+    for t in slim:
+        closing = _parse_closing(t.get("closing_date", ""))
+        (archive if (closing and closing < horizon) else live).append(t)
+
     SITE_DATA.parent.mkdir(parents=True, exist_ok=True)
     SITE_DATA.write_text(json.dumps({
         "generated_at": cutoff,
-        "tenders": [{k: v for k, v in t.items() if k not in SITE_SKIP}
-                    for t in tenders],
+        "archived": len(archive),
+        "tenders": live,
         "events": recent,
+    }, default=str, separators=(",", ":")), encoding="utf-8")
+    SITE_ARCHIVE.write_text(json.dumps({
+        "generated_at": cutoff,
+        "tenders": archive,
     }, default=str, separators=(",", ":")), encoding="utf-8")
 
     return {"tenders": len(tenders), "events": len(events),
-            "site_events": len(recent)}
+            "site_events": len(recent), "live": len(live),
+            "archived": len(archive)}
 
 
 def _days_ago(days: int) -> str:
-    from datetime import timedelta
     return (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+
+
+def _parse_closing(raw: str):
+    """Portal dates look like '15-Sep-2026 11:00 AM'."""
+    for fmt in ("%d-%b-%Y %I:%M %p", "%d-%b-%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime((raw or "").strip(), fmt)
+        except ValueError:
+            continue
+    return None
 
 
 def restore(conn) -> dict:

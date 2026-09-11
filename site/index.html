@@ -253,7 +253,7 @@
     </label>
     <label style="display:flex;align-items:center;gap:7px;margin-top:10px">
       <input type="checkbox" id="f-closed" style="width:auto;margin:0">
-      <span>Include closed tenders</span>
+      <span>Include closed <span class="lakh">past prices &amp; EMDs</span></span>
     </label>
     <button class="clear" id="f-clear">Clear filters</button>
     </details>
@@ -282,6 +282,30 @@ let DB = {tenders:[], events:[]}, view = 'tenders';
 // GitHub and cannot see them, so this marks things to come back to -- it
 // does not change what you get alerted about. That is what the filters in
 // notify_config.json are for.
+// Closed tenders older than a month live in a separate file, fetched only
+// if someone asks for them. They are worth keeping -- what a body actually
+// paid, and what EMD it asked, is useful when pricing a bid -- but they
+// should not be in every visitor's first download, since within a year
+// they would outnumber the live ones four to one.
+let archiveLoaded = false;
+async function loadArchive(){
+  if (archiveLoaded) return;
+  archiveLoaded = true;
+  try {
+    const a = await (await fetch('archive.json?v=' + (DB.generated_at||''))).json();
+    const now = new Date();
+    (a.tenders || []).forEach(t => {
+      t.work_list = (t.work_categories||'').split(',').filter(Boolean);
+      t._d = parseDate(t.closing_date);
+      t._closed = !!(t._d && t._d < now);
+      DB.byId[t.tender_id] = t;
+    });
+    DB.tenders = DB.tenders.concat(a.tenders || []);
+  } catch (_) {
+    archiveLoaded = false;   // let a later tick retry
+  }
+}
+
 const SAVED_KEY = 'tn-tenders-saved';
 function loadSaved(){
   try { return new Set(JSON.parse(localStorage.getItem(SAVED_KEY) || '[]')); }
@@ -604,6 +628,8 @@ function render(){
       (out.length > shown.length ? ' \u00b7 showing ' + shown.length : '') +
       (closedHidden && !$('f-closed').checked
         ? ' \u00b7 ' + closedHidden + ' closed hidden' : '') +
+      (DB.archived && !$('f-closed').checked
+        ? ' \u00b7 ' + DB.archived + ' older archived' : '') +
       (noValueHidden && !$('f-novalue').checked
         ? ' \u00b7 ' + noValueHidden + ' with no published value hidden' : '') +
       '</p>' + shown.map(tenderCard).join('') +
@@ -669,7 +695,8 @@ let timer;
 document.querySelectorAll('#side select, #side input').forEach(el =>
   el.addEventListener('input', () => {
     clearTimeout(timer);
-    timer = setTimeout(() => {
+    timer = setTimeout(async () => {
+      if (el.id === 'f-closed' && el.checked) await loadArchive();
       if (el.id === 'f-district') buildFilterOptions();
       shownCount = PAGE; renderChips(); render();
     }, 120);
