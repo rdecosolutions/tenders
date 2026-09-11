@@ -60,7 +60,8 @@ def load_config() -> dict:
     """
     defaults = {"departments": [], "districts": [], "work_categories": [],
                 "local_bodies": [], "min_amount": 0, "event_types": [],
-                "style": "digest", "max_per_tender": 5}
+                "style": "digest", "max_per_tender": 5,
+                "closing_soon_days": 3, "exclude_work_categories": []}
     try:
         raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except Exception:
@@ -87,11 +88,15 @@ def matches(row, cfg: dict) -> bool:
     if not (ok("department", "departments") and ok("district", "districts")
             and ok("local_body", "local_bodies")):
         return False
+    tags = set(t for t in (row["work_categories"] or "").split(",") if t)
     wanted_work = cfg.get("work_categories") or []
-    if wanted_work:
-        tags = set((row["work_categories"] or "").split(","))
-        if not tags & set(wanted_work):
-            return False
+    if wanted_work and not tags & set(wanted_work):
+        return False
+    # Opt-out list: the quickest way to silence a whole class of tender you
+    # never bid on, e.g. shop rentals, without listing everything you do want.
+    excluded = set(cfg.get("exclude_work_categories") or [])
+    if excluded and tags and tags <= excluded:
+        return False
     if _amount(row["est_amount_raw"]) < float(cfg.get("min_amount") or 0):
         return False
     return True
@@ -118,12 +123,55 @@ def recent_matching(conn, cfg: dict) -> list:
     return [r for r in rows if matches(r, cfg)]
 
 
+def closing_soon(conn, cfg: dict) -> list:
+    """
+    Tenders matching the config that close within the next few days.
+
+    These raise no event -- nothing about them changed -- so nothing else
+    would ever mention them. Missing a deadline costs more than missing a
+    listing, which makes this the alert most worth having.
+    """
+    days = int(cfg.get("closing_soon_days") or 0)
+    if days <= 0:
+        return []
+    now = datetime.now()
+    horizon = now + timedelta(days=days)
+    out = []
+    for r in conn.execute(
+            "SELECT '' AS event_type, '' AS detail, department, district, "
+            "local_body, title, est_amount_raw, work_categories, closing_date "
+            "FROM tenders WHERE status != 'cancelled'"):
+        d = _parse_closing(r["closing_date"])
+        if d and now <= d <= horizon and matches(r, dict(cfg, event_types=[])):
+            out.append((d, r))
+    out.sort(key=lambda pair: pair[0])
+    return [r for _d, r in out]
+
+
+def _parse_closing(raw: str):
+    """Portal dates look like '15-Sep-2026 11:00 AM'."""
+    for fmt in ("%d-%b-%Y %I:%M %p", "%d-%b-%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime((raw or "").strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def build_digest(conn, cfg: dict | None = None) -> tuple[str, str] | None:
     """Summarise recent matching events, or None if there is nothing."""
     cfg = cfg or load_config()
     rows = recent_matching(conn, cfg)
-    if not rows:
+    soon = closing_soon(conn, cfg)
+    if not rows and not soon:
         return None
+    if not rows:
+        # Nothing changed, but deadlines are coming.
+        d = int(cfg.get("closing_soon_days") or 3)
+        head = soon[0]
+        return (f"{len(soon)} closing within {d} days",
+                f"Next: {(head['title'] or '')[:70]} "
+                f"\u2014 {head['closing_date']}")
 
     if cfg.get("style") == "per_tender":
         top = rows[: int(cfg.get("max_per_tender") or 5)]
@@ -152,6 +200,9 @@ def build_digest(conn, cfg: dict | None = None) -> tuple[str, str] | None:
     if places:
         top = ", ".join(f"{d} ({n})" for d, n in places.most_common(3))
         body += f"\n{top}"
+    if soon:
+        d = int(cfg.get("closing_soon_days") or 3)
+        body += f"\n\u23f0 {len(soon)} closing within {d} days"
     return title, body
 
 

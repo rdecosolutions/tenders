@@ -187,6 +187,15 @@ TOWN_DISTRICT: dict[str, str] = {
     "vaniyambadi": "Tirupathur", "vellakoil": "Tiruppur",
     "virudhachalam": "Cuddalore", "pammal": "Chengalpattu",
     "perungalathur": "Chengalpattu",
+    # Second pass, from rows that were still blank. Each of these shares its
+    # name with a village elsewhere in the state; the MUNICIPALITY of that
+    # name is unambiguous, which is what the portal means here.
+    "edanganasalai": "Salem", "kollankodu": "Kanniyakumari",
+    "kollancode": "Kanniyakumari", "nelliyalam": "Nilgiris",
+    "gudalur": "Nilgiris", "pallapatti": "Karur",
+    # Narasingapuram is deliberately absent: there is one in Tiruvallur and
+    # one in the Vellore/Tirupathur area and the portal text does not say
+    # which. Blank beats wrong.
 }
 
 _TOWN_INDEX: list[tuple[str, str]] = sorted(

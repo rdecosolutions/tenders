@@ -68,7 +68,11 @@
     cursor:pointer;font-size:13px}
   .count{color:var(--muted);font-size:13.5px;margin:0 0 12px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;
-    padding:16px 18px;margin-bottom:11px}
+    padding:16px 18px;margin-bottom:11px;position:relative}
+  .card h3{padding-right:34px}
+  button.save{position:absolute;top:12px;right:12px;border:0;background:none;
+    font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:2px}
+  button.save.on{color:#e0a643}
   .card h3{margin:0 0 10px;font-size:15.5px;line-height:1.4;font-weight:600}
   .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
   .chip{font-size:11.5px;padding:2.5px 9px;border-radius:99px;
@@ -226,6 +230,10 @@
       <option value="30">30 days</option>
     </select>
     <label style="display:flex;align-items:center;gap:7px;margin-top:14px">
+      <input type="checkbox" id="f-saved" style="width:auto;margin:0">
+      <span>Saved only <span id="saved-n" class="lakh"></span></span>
+    </label>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:10px">
       <input type="checkbox" id="f-closed" style="width:auto;margin:0">
       <span>Include closed tenders</span>
     </label>
@@ -249,6 +257,21 @@ const esc = s => (s||'').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money = v => v ? '\u20B9' + v : '\u2014';
 let DB = {tenders:[], events:[]}, view = 'tenders';
+
+// Saved tenders live in this browser only. The nightly notifier runs on
+// GitHub and cannot see them, so this marks things to come back to -- it
+// does not change what you get alerted about. That is what the filters in
+// notify_config.json are for.
+const SAVED_KEY = 'tn-tenders-saved';
+function loadSaved(){
+  try { return new Set(JSON.parse(localStorage.getItem(SAVED_KEY) || '[]')); }
+  catch (_) { return new Set(); }   // private mode, blocked storage, bad JSON
+}
+function persistSaved(){
+  try { localStorage.setItem(SAVED_KEY, JSON.stringify([...saved])); }
+  catch (_) {}                      // saving is a convenience, never a failure
+}
+let saved = loadSaved();
 // Rendering every match at once built a 200,000px-tall page on a phone:
 // scrolling stuttered and taps lagged. Render a screenful at a time.
 const PAGE = 40;
@@ -299,6 +322,7 @@ function apply(){
     if (!isNaN(min) && (a === null || a < min)) return false;
     if (!isNaN(max) && (a === null || a > max)) return false;
     if (horizon && (!t._d || t._d > horizon)) return false;
+    if ($('f-saved').checked && !saved.has(t.tender_id)) return false;
     if (t._closed){ closedHidden++; if(!$('f-closed').checked) return false; }
     return true;
   });
@@ -342,7 +366,13 @@ function tenderCard(t){
   // The portal's chain is "Dept||Circle||Local body" - show it as a path.
   const org = (t.org_chain||'').split('||').filter(Boolean)
                 .map(esc).join(' <span style="opacity:.4">\u203a</span> ');
+  const isSaved = saved.has(t.tender_id);
   return '<article class="card">' +
+    '<button class="save' + (isSaved ? ' on' : '') + '" data-save="' +
+      esc(t.tender_id) + '" title="' +
+      (isSaved ? 'Saved' : 'Save for later') + '" aria-label="' +
+      (isSaved ? 'Remove from saved' : 'Save for later') + '">' +
+      (isSaved ? '\u2605' : '\u2606') + '</button>' +
     '<h3>' + (esc(t.title) || '(untitled)') + '</h3>' +
     '<div class="chips">' +
       '<span class="chip" title="' + esc(deptLabel(t.department)) + '">' +
@@ -364,6 +394,13 @@ function tenderCard(t){
         esc(deptLabel(t.department)) + '</dd></div>' +
       '<div style="grid-column:1/-1"><dt>Inviting office</dt><dd>' +
         (org||'\u2014') + '</dd></div>' +
+      // The portal's own description, when it says more than the title.
+      // Titles are often just a reference number, so this is frequently the
+      // only readable account of what the work actually is.
+      (t.work_description &&
+        t.work_description.trim().toLowerCase() !== (t.title||'').trim().toLowerCase()
+        ? '<div style="grid-column:1/-1"><dt>Description</dt><dd>' +
+          esc(t.work_description) + '</dd></div>' : '') +
       (t.eligibility ? '<div style="grid-column:1/-1"><dt>Who can bid</dt><dd>' +
         esc(t.eligibility) + '</dd></div>' : '') +
     '</dl>' +
@@ -408,6 +445,10 @@ const FILTER_LABELS = {
   'f-max': 'Max', 'f-closing': 'Closing within'
 };
 
+function updateSavedCount(){
+  $('saved-n').textContent = saved.size ? '(' + saved.size + ')' : '';
+}
+
 function renderChips(){
   const bar = $('chips');
   const active = Object.keys(FILTER_LABELS)
@@ -422,6 +463,9 @@ function renderChips(){
              esc(shown) + suffix +
              '<button data-clear="' + id + '" aria-label="Remove">\u00d7</button></span>';
     });
+  if ($('f-saved').checked)
+    active.push('<span class="fchip">Saved only' +
+      '<button data-clear="f-saved" aria-label="Remove">\u00d7</button></span>');
   if ($('f-closed').checked)
     active.push('<span class="fchip">Including closed' +
       '<button data-clear="f-closed" aria-label="Remove">\u00d7</button></span>');
@@ -561,6 +605,17 @@ function copyText(text){
 }
 
 document.addEventListener('click', e => {
+  const sv = e.target.closest('.save');
+  if (sv){
+    const id = sv.dataset.save;
+    if (saved.has(id)) saved.delete(id); else saved.add(id);
+    persistSaved();
+    sv.classList.toggle('on', saved.has(id));
+    sv.textContent = saved.has(id) ? '\u2605' : '\u2606';
+    updateSavedCount();
+    if ($('f-saved').checked) render();
+    return;
+  }
   const find = e.target.closest('.findit');
   const copy = e.target.closest('.copyid');
   const b = find || copy;

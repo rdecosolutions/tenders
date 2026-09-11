@@ -1,15 +1,31 @@
 {
-  "_comment": "Which tender changes are worth a notification. Edit this file on GitHub and the next nightly run uses it. Empty list = no filter on that field.",
+  "_README": "Which tender changes are worth interrupting you for. Edit this file on GitHub (pencil icon) and the next nightly run uses it. An empty list means no filter on that field. Without filters you get the whole state, which is a lot.",
 
+  "_departments": "Any of: MAWS, RD&PR, DTP, ADW, HR&CE. Empty = all five.",
   "departments": [],
+
+  "_districts": "Exact district names as shown on the site, e.g. [\"Thanjavur\", \"Mayiladuthurai\"]. Empty = all 38.",
   "districts": [],
+
+  "_work_categories": "Only notify about these kinds of work, e.g. [\"Water Supply\", \"Motor & Pump Supply\"]. Empty = all.",
   "work_categories": [],
+
+  "_exclude_work_categories": "Opposite of the above: never notify about these. Shop rentals are municipal shop and market lettings, not construction work - excluded by default because most contractors do not bid on them.",
+  "exclude_work_categories": ["Shop & Property Rental"],
+
+  "_local_bodies": "Exact town or panchayat names. Empty = all.",
   "local_bodies": [],
 
+  "_min_amount": "Ignore anything below this rupee value. 500000 = 5 lakh.",
   "min_amount": 0,
-  "event_types": ["NEW", "CORRIGENDUM", "RETENDER", "DATE_EXTENSION", "CANCELLATION"],
 
-  "_style": "digest = one summary notification. per_tender = one notification per match (only sensible with tight filters).",
+  "_event_types": "Which of the five changes count. Empty = all. To be told only about things that could cost you money, use [\"CANCELLATION\", \"RETENDER\", \"DATE_EXTENSION\"].",
+  "event_types": [],
+
+  "_closing_soon_days": "Also warn about matching tenders whose deadline falls within this many days. 0 turns it off.",
+  "closing_soon_days": 3,
+
+  "_style": "digest = one summary. per_tender = one line per match, only sensible once the filters are tight.",
   "style": "digest",
   "max_per_tender": 5
 }
