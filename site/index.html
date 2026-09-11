@@ -755,11 +755,15 @@ document.querySelectorAll('#side select, #side input').forEach(el =>
       shownCount = PAGE; renderChips(); render();
     }, 120);
   }));
-$('f-clear').onclick = () => {
-  document.querySelectorAll('#side select, #side input').forEach(el => {
-    if (el.type === 'checkbox') el.checked = false; else el.value = '';
-  });
-  render();
+// Both clear buttons go through clearAll(), which also resets paging and
+// repaints the filter chips. The old inline version did neither, so chips
+// for filters just cleared stayed on screen.
+$('f-clear').onclick = () => clearAll();
+
+$('q-clear').onclick = () => {
+  $('f-q').value = '';
+  $('f-q').dispatchEvent(new Event('input', {bubbles: true}));
+  $('f-q').focus();
 };
 function setView(v){
   view = v;
