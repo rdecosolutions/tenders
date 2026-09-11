@@ -10,6 +10,10 @@ on:
       - "site/**"
       - "engine/export.py"
       - ".github/workflows/deploy.yml"
+      # data/ is the database. A commit that only changes it -- a catch-up
+      # sweep run by hand, say -- still has to republish, or the site keeps
+      # serving yesterday's tenders while the repo holds today's.
+      - "data/**"
   workflow_dispatch:
 
 concurrency:
