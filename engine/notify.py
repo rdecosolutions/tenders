@@ -48,22 +48,89 @@ from store import connect
 
 SITE_URL = os.environ.get("SITE_URL", "https://tenders.rdecosolutions.org/")
 LOOKBACK_HOURS = int(os.environ.get("NOTIFY_HOURS", "20"))
+CONFIG_PATH = (__import__("pathlib").Path(__file__).resolve().parent.parent
+               / "notify_config.json")
+
+
+def load_config() -> dict:
+    """
+    Read notify_config.json — which changes are worth interrupting someone
+    for. Kept as a plain file in the repo, not a secret, so it can be edited
+    in GitHub's web editor without touching code.
+    """
+    defaults = {"departments": [], "districts": [], "work_categories": [],
+                "local_bodies": [], "min_amount": 0, "event_types": [],
+                "style": "digest", "max_per_tender": 5}
+    try:
+        raw = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return defaults
+    return {k: raw.get(k, v) for k, v in defaults.items()}
+
+
+def _amount(raw: str) -> float:
+    digits = "".join(c for c in (raw or "") if c.isdigit() or c == ".")
+    try:
+        return float(digits) if digits else 0.0
+    except ValueError:
+        return 0.0
+
+
+def matches(row, cfg: dict) -> bool:
+    """True if this change is one the config asks to be told about."""
+    def ok(field, key):
+        wanted = cfg.get(key) or []
+        return not wanted or (row[field] or "") in wanted
+
+    if cfg.get("event_types") and row["event_type"] not in cfg["event_types"]:
+        return False
+    if not (ok("department", "departments") and ok("district", "districts")
+            and ok("local_body", "local_bodies")):
+        return False
+    wanted_work = cfg.get("work_categories") or []
+    if wanted_work:
+        tags = set((row["work_categories"] or "").split(","))
+        if not tags & set(wanted_work):
+            return False
+    if _amount(row["est_amount_raw"]) < float(cfg.get("min_amount") or 0):
+        return False
+    return True
 
 # Wording matches the badges on the alerts screen.
 LABEL = {"NEW": "new", "CORRIGENDUM": "corrected", "RETENDER": "retendered",
          "DATE_EXTENSION": "extended", "CANCELLATION": "cancelled"}
 
 
-def build_digest(conn) -> tuple[str, str] | None:
-    """Summarise recent events, or None if there is nothing worth sending."""
+def recent_matching(conn, cfg: dict) -> list:
     since = (datetime.now(timezone.utc)
              - timedelta(hours=LOOKBACK_HOURS)).isoformat()
     rows = conn.execute(
-        "SELECT e.event_type, t.department, t.district, t.title "
+        "SELECT e.event_type, e.detail, t.department, t.district, "
+        "t.local_body, t.title, t.est_amount_raw, t.work_categories, "
+        "t.closing_date "
         "FROM events e JOIN tenders t ON t.tender_id = e.tender_id "
-        "WHERE e.created_at >= ?", (since,)).fetchall()
+        "WHERE e.created_at >= ? ORDER BY e.id DESC", (since,)).fetchall()
+    return [r for r in rows if matches(r, cfg)]
+
+
+def build_digest(conn, cfg: dict | None = None) -> tuple[str, str] | None:
+    """Summarise recent matching events, or None if there is nothing."""
+    cfg = cfg or load_config()
+    rows = recent_matching(conn, cfg)
     if not rows:
         return None
+
+    if cfg.get("style") == "per_tender":
+        top = rows[: int(cfg.get("max_per_tender") or 5)]
+        lines = []
+        for r in top:
+            amt = f" \u20b9{r['est_amount_raw']}" if r["est_amount_raw"] else ""
+            lines.append(f"\u2022 {(r['title'] or '')[:70]}{amt}"
+                         f" \u2014 {r['district'] or '?'}")
+        more = len(rows) - len(top)
+        body = "\n".join(lines) + (f"\n+{more} more" if more > 0 else "")
+        return (f"{len(rows)} matching tender{'s' if len(rows) != 1 else ''}",
+                body)
 
     kinds = Counter(r["event_type"] for r in rows)
     bits = [f"{n} {LABEL.get(k, k.lower())}" for k, n in kinds.most_common()]
