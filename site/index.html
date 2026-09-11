@@ -185,7 +185,7 @@
   </div>
 </header>
 
-<div class="tabbar" data-build="fb87312">
+<div class="tabbar">
   <div class="tabs">
     <button class="tab on" id="t-tenders">Tenders</button>
     <button class="tab" id="t-alerts">Alerts</button>
@@ -677,10 +677,27 @@ function render(){
   if (more) more.onclick = () => { shownCount += PAGE; render(); };
 }
 
+// GitHub Pages serves the page with max-age=600 and browsers hold on to it
+// for longer, so people kept using a version from hours earlier and saw
+// fixes that had already shipped as still broken. data.json is always
+// fetched fresh, so it carries the build id the site was published with:
+// if the page does not match it, the page is stale and reloads itself once.
+const BUILD = '__BUILD__';
+
+function checkStale(serverBuild){
+  if (!serverBuild || serverBuild === BUILD) return false;
+  if (BUILD === '__BUILD__') return false;        // running from source
+  if (sessionStorage.getItem('tn-reloaded') === serverBuild) return false;
+  try { sessionStorage.setItem('tn-reloaded', serverBuild); } catch (_) {}
+  location.reload();
+  return true;
+}
+
 async function boot(){
   let d;
   try {
     d = await (await fetch('data.json?v=' + Date.now())).json();
+    if (checkStale(d.build)) return;
   } catch (err) {
     $('main').innerHTML = '<div class="empty">Could not load the tender data.' +
       '<br>If this persists, the nightly update may have failed.</div>';
@@ -931,7 +948,6 @@ async function setupNotifications(){
 }
 setupNotifications();
 
-console.log('TN Tenders build fb87312');
 boot();
 </script>
 </body>

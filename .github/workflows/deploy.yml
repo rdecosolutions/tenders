@@ -33,6 +33,13 @@ jobs:
         run: |
           python3 engine/export.py --restore
           python3 engine/export.py --dump
+        env:
+          BUILD_ID: ${{ github.sha }}
+
+      # Stamp the same id into the page, so it can tell whether the copy a
+      # browser is holding matches what was published.
+      - name: Stamp the build id into the page
+        run: sed -i "s/__BUILD__/${GITHUB_SHA}/" site/index.html
       - name: Check the page structure
         run: python3 site/check_layout.py site/index.html
 

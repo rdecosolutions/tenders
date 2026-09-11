@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -105,6 +106,9 @@ def dump(conn) -> dict:
     SITE_DATA.parent.mkdir(parents=True, exist_ok=True)
     SITE_DATA.write_text(json.dumps({
         "generated_at": cutoff,
+        # Set by the workflow to the commit being published. The page
+        # compares it against its own and reloads if it is behind.
+        "build": os.environ.get("BUILD_ID", ""),
         "archived": len(archive),
         "tenders": live,
         "events": recent,
