@@ -101,6 +101,11 @@ LABEL = {"NEW": "new", "CORRIGENDUM": "corrected", "RETENDER": "retendered",
          "DATE_EXTENSION": "extended", "CANCELLATION": "cancelled"}
 
 
+def kinds_is_backfill(rows) -> bool:
+    """A burst this large is the engine catching up, not the portal moving."""
+    return sum(1 for r in rows if r["event_type"] == "NEW") >= 300
+
+
 def recent_matching(conn, cfg: dict) -> list:
     since = (datetime.now(timezone.utc)
              - timedelta(hours=LOOKBACK_HOURS)).isoformat()
@@ -131,6 +136,12 @@ def build_digest(conn, cfg: dict | None = None) -> tuple[str, str] | None:
         body = "\n".join(lines) + (f"\n+{more} more" if more > 0 else "")
         return (f"{len(rows)} matching tender{'s' if len(rows) != 1 else ''}",
                 body)
+
+    # A re-scrape from an empty database would otherwise push "2,400 tender
+    # updates", which is noise, not news.
+    if kinds_is_backfill(rows):
+        return ("Initial catch-up",
+                f"{len(rows)} tenders loaded. Normal alerts resume tomorrow.")
 
     kinds = Counter(r["event_type"] for r in rows)
     bits = [f"{n} {LABEL.get(k, k.lower())}" for k, n in kinds.most_common()]

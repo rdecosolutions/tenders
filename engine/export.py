@@ -45,6 +45,13 @@ SITE_SKIP = {"last_hash"}
 # Alerts older than this stop being interesting and would grow forever.
 SITE_EVENT_DAYS = 30
 
+# The very first sweep recorded ~2,400 NEW events in one day — every tender
+# that already existed. Publishing those as "changes" buries the handful
+# that actually happened overnight. A day with more NEW events than this is
+# a backfill, not news, so it is left out of the alerts feed. The tenders
+# themselves are unaffected; only the feed is.
+BACKFILL_NEW_PER_DAY = 300
+
 
 def _rows(conn, table: str, order: str) -> list[dict]:
     return [dict(r) for r in conn.execute(
@@ -68,6 +75,16 @@ def dump(conn) -> dict:
               .replace(microsecond=0).isoformat())[:10]
     recent = [e for e in events
               if (e.get("created_at") or "")[:10] >= _days_ago(SITE_EVENT_DAYS)]
+
+    from collections import Counter
+    new_per_day = Counter(e["created_at"][:10] for e in recent
+                          if e.get("event_type") == "NEW" and e.get("created_at"))
+    backfill_days = {d for d, n in new_per_day.items()
+                     if n >= BACKFILL_NEW_PER_DAY}
+    if backfill_days:
+        recent = [e for e in recent
+                  if not (e.get("event_type") == "NEW"
+                          and (e.get("created_at") or "")[:10] in backfill_days)]
 
     SITE_DATA.parent.mkdir(parents=True, exist_ok=True)
     SITE_DATA.write_text(json.dumps({

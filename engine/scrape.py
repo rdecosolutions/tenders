@@ -132,6 +132,66 @@ _ALIAS_INDEX: list[tuple[str, str]] = sorted(
 )
 
 
+
+# ---------------------------------------------------------------------------
+# Town -> district. Half of MAWS tenders had no district because the local
+# body is a town whose name is not a district name: Hosur is in Krishnagiri,
+# Palani in Dindigul, Tambaram in Chengalpattu. Without this the district
+# filter silently missed them.
+#
+# Only towns whose district is unambiguous are listed. A wrong district is
+# worse than a blank one — someone filtering for Thanjavur must not be shown
+# work in Salem — so genuinely ambiguous names are deliberately left out and
+# simply stay blank.
+# ---------------------------------------------------------------------------
+TOWN_DISTRICT: dict[str, str] = {
+    "adirampattinam": "Thanjavur", "arakkonam": "Ranipet",
+    "aranthangi": "Pudukkottai", "arruppukottai": "Virudhunagar",
+    "aruppukottai": "Virudhunagar", "attur": "Salem", "avadi": "Tiruvallur",
+    "avinashi": "Tiruppur", "chengam": "Tiruvannamalai",
+    "chidambaram": "Cuddalore", "colachal": "Kanniyakumari",
+    "colachel": "Kanniyakumari", "devakottai": "Sivaganga",
+    "gobichettipalam": "Erode", "gobichettipalayam": "Erode",
+    "harur": "Dharmapuri", "hosur": "Krishnagiri", "idapadi": "Salem",
+    "edappadi": "Salem", "jayankondam": "Ariyalur",
+    "jolarpet": "Tirupathur", "jolarpettai": "Tirupathur",
+    "kadayanallur": "Tenkasi", "karaikudi": "Sivaganga",
+    "karamadai": "Coimbatore", "kayalpattinam": "Thoothukudi",
+    "komarapalayam": "Namakkal", "kotagiri": "Nilgiris",
+    "kottakuppam": "Viluppuram", "kudiyatham": "Vellore",
+    "gudiyatham": "Vellore", "kulithalai": "Karur",
+    "kumbakonam": "Thanjavur", "kundrathur": "Kancheepuram",
+    "lalgudi": "Tiruchirappalli", "madhuranthagam": "Chengalpattu",
+    "madurantakam": "Chengalpattu", "mamallapuram": "Chengalpattu",
+    "manaparai": "Tiruchirappalli", "mangadu": "Kancheepuram",
+    "melur": "Madurai", "melvisharam": "Ranipet",
+    "mettupalayam": "Coimbatore", "mettur": "Salem",
+    "musiri": "Tiruchirappalli", "nandivaram": "Chengalpattu",
+    "guduvancheri": "Chengalpattu", "nellikuppam": "Cuddalore",
+    "padmanabapuram": "Kanniyakumari", "palani": "Dindigul",
+    "palladam": "Tiruppur", "pallipalayam": "Namakkal",
+    "pattukottai": "Thanjavur", "periyakulam": "Theni",
+    "pernampattu": "Tirupathur", "perundurai": "Erode",
+    "pollachi": "Coimbatore", "polur": "Tiruvannamalai",
+    "ponneri": "Tiruvallur", "poonamallee": "Tiruvallur",
+    "pugalur": "Karur", "punjaipuliampatti": "Erode",
+    "rameswaram": "Ramanathapuram", "rasipuram": "Namakkal",
+    "sankagiri": "Salem", "sankari": "Salem",
+    "sankarankoil": "Tenkasi", "sattur": "Virudhunagar",
+    "sirkazhi": "Mayiladuthurai", "sivakasi": "Virudhunagar",
+    "surandai": "Tenkasi", "tambaram": "Chengalpattu",
+    "thuraiyur": "Tiruchirappalli", "tiruchendur": "Thoothukudi",
+    "tiruchengode": "Namakkal", "tirukovilur": "Kallakurichi",
+    "tirumangalam": "Madurai", "tiruthuraipoondi": "Tiruvarur",
+    "tiruttani": "Tiruvallur", "usilampatti": "Madurai",
+    "vaniyambadi": "Tirupathur", "vellakoil": "Tiruppur",
+    "virudhachalam": "Cuddalore", "pammal": "Chengalpattu",
+    "perungalathur": "Chengalpattu",
+}
+
+_TOWN_INDEX: list[tuple[str, str]] = sorted(
+    TOWN_DISTRICT.items(), key=lambda kv: len(kv[0]), reverse=True)
+
 def find_district(*texts: str) -> str:
     """
     Return the canonical TN district named anywhere in the given text, or "".
@@ -147,6 +207,14 @@ def find_district(*texts: str) -> str:
         low = text.lower()
         for alias, canon in _ALIAS_INDEX:
             if alias in low:
+                return canon
+    # No district name anywhere — fall back to the town it names.
+    for text in texts:
+        if not text:
+            continue
+        low = text.lower()
+        for town, canon in _TOWN_INDEX:
+            if town in low:
                 return canon
     return ""
 
