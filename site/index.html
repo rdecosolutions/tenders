@@ -70,6 +70,11 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;
     padding:16px 18px;margin-bottom:11px;position:relative}
   .card h3{padding-right:34px}
+  .na{color:var(--muted);font-style:italic;font-size:12.5px}
+  .card.fresh{border-color:var(--new)}
+  .newflag{position:absolute;top:-1px;left:16px;background:var(--new);
+    color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;padding:2px 8px;border-radius:0 0 5px 5px}
   button.save{position:absolute;top:12px;right:12px;border:0;background:none;
     font-size:20px;line-height:1;cursor:pointer;color:var(--muted);padding:2px}
   button.save.on{color:#e0a643}
@@ -208,7 +213,9 @@
     <input id="f-q" placeholder="title, tender ID, town&hellip;">
     <label>Department</label><select id="f-dept"></select>
     <label>District</label><select id="f-district"></select>
-    <label>Local body</label><select id="f-local"></select>
+    <label>Town / local body</label>
+    <input id="f-local" list="local-list" placeholder="all — type to search">
+    <datalist id="local-list"></datalist>
     <label>Work type</label><select id="f-work"></select>
     <label>Sort by</label>
     <select id="f-sort">
@@ -216,18 +223,29 @@
       <option value="newest">Recently published</option>
       <option value="value">Highest value</option>
     </select>
-    <label>Estimated value (&#8377;) <span class="lakh">1 lakh = 1,00,000</span></label>
-    <div class="row2">
-      <input id="f-min" type="number" placeholder="min" inputmode="numeric">
-      <input id="f-max" type="number" placeholder="max" inputmode="numeric">
+    <label>Estimated value</label>
+    <select id="f-band">
+      <option value="">Any value</option>
+      <option value="0-500000">Under &#8377;5 lakh</option>
+      <option value="500000-5000000">&#8377;5 lakh &ndash; &#8377;50 lakh</option>
+      <option value="5000000-">Over &#8377;50 lakh</option>
+      <option value="custom">Custom range&hellip;</option>
+    </select>
+    <div class="row2" id="custom-range" hidden>
+      <input id="f-min" type="number" placeholder="min &#8377;" inputmode="numeric">
+      <input id="f-max" type="number" placeholder="max &#8377;" inputmode="numeric">
     </div>
+    <label id="novalue-wrap" style="display:none;align-items:center;gap:7px;
+      margin-top:10px">
+      <input type="checkbox" id="f-novalue" style="width:auto;margin:0">
+      <span>Also show tenders with no published value</span>
+    </label>
     <label>Closing within</label>
     <select id="f-closing">
       <option value="">Any time</option>
+      <option value="1">Today or tomorrow</option>
       <option value="3">3 days</option>
       <option value="7">7 days</option>
-      <option value="14">14 days</option>
-      <option value="30">30 days</option>
     </select>
     <label style="display:flex;align-items:center;gap:7px;margin-top:14px">
       <input type="checkbox" id="f-saved" style="width:auto;margin:0">
@@ -255,7 +273,9 @@
 const $ = id => document.getElementById(id);
 const esc = s => (s||'').replace(/[&<>"]/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const money = v => v ? '\u20B9' + v : '\u2014';
+// A bare dash reads like a bug. 475 tenders genuinely have no figure on the
+// portal, and saying so makes clear whose omission it is.
+const money = v => v ? '\u20B9' + v : '<span class="na">Not published</span>';
 let DB = {tenders:[], events:[]}, view = 'tenders';
 
 // Saved tenders live in this browser only. The nightly notifier runs on
@@ -272,6 +292,15 @@ function persistSaved(){
   catch (_) {}                      // saving is a convenience, never a failure
 }
 let saved = loadSaved();
+
+// "2,452 tenders" says nothing about what changed for you. Remember when
+// this browser last looked, so new arrivals can be pointed out.
+const VISIT_KEY = 'tn-tenders-last-visit';
+let lastVisit = null;
+try { lastVisit = localStorage.getItem(VISIT_KEY); } catch (_) {}
+function stampVisit(){
+  try { localStorage.setItem(VISIT_KEY, new Date().toISOString()); } catch (_) {}
+}
 // Rendering every match at once built a 200,000px-tall page on a phone:
 // scrolling stuttered and taps lagged. Render a screenful at a time.
 const PAGE = 40;
@@ -304,7 +333,9 @@ function apply(){
   const q = $('f-q').value.trim().toLowerCase();
   const dept = $('f-dept').value, dist = $('f-district').value;
   const local = $('f-local').value, work = $('f-work').value;
-  const min = parseFloat($('f-min').value), max = parseFloat($('f-max').value);
+  let [min, max] = bandRange();
+  const amountFiltered = !isNaN(min) || !isNaN(max);
+  let noValueHidden = 0;
   const days = $('f-closing').value ? +$('f-closing').value : null;
   const now = new Date();
   const horizon = days ? new Date(now.getTime() + days*864e5) : null;
@@ -319,8 +350,16 @@ function apply(){
                (t.local_body||'') + ' ' + (t.ref_number||''))
                .toLowerCase().includes(q)) return false;
     const a = amount(t);
-    if (!isNaN(min) && (a === null || a < min)) return false;
-    if (!isNaN(max) && (a === null || a > max)) return false;
+    if (amountFiltered && a === null){
+      // The portal publishes no value for ~19% of tenders. Silently dropping
+      // them means a value filter hides work you might want, with no clue
+      // that it happened. Count them, and let them be shown on request.
+      noValueHidden++;
+      if (!$('f-novalue').checked) return false;
+    } else {
+      if (!isNaN(min) && (a === null || a < min)) return false;
+      if (!isNaN(max) && (a === null || a > max)) return false;
+    }
     if (horizon && (!t._d || t._d > horizon)) return false;
     if ($('f-saved').checked && !saved.has(t.tender_id)) return false;
     if (t._closed){ closedHidden++; if(!$('f-closed').checked) return false; }
@@ -336,7 +375,7 @@ function apply(){
     out.sort((a,b) => (a._closed - b._closed) ||
       ((a._d ? a._d.getTime() : 8.64e15) - (b._d ? b._d.getTime() : 8.64e15)));
   }
-  return {out, closedHidden};
+  return {out, closedHidden, noValueHidden, amountFiltered};
 }
 
 // "MAWS" and "RD&PR" are meaningless unless you already work in this world.
@@ -367,7 +406,9 @@ function tenderCard(t){
   const org = (t.org_chain||'').split('||').filter(Boolean)
                 .map(esc).join(' <span style="opacity:.4">\u203a</span> ');
   const isSaved = saved.has(t.tender_id);
-  return '<article class="card">' +
+  const isNew = lastVisit && t.first_seen && t.first_seen > lastVisit;
+  return '<article class="card' + (isNew ? ' fresh' : '') + '">' +
+    (isNew ? '<span class="newflag">New</span>' : '') +
     '<button class="save' + (isSaved ? ' on' : '') + '" data-save="' +
       esc(t.tender_id) + '" title="' +
       (isSaved ? 'Saved' : 'Save for later') + '" aria-label="' +
@@ -409,6 +450,7 @@ function tenderCard(t){
       '<button class="findit" data-id="' + esc(t.tender_id) + '">' +
         'Copy ID &amp; find on portal \u2197</button>' +
       '<button class="copyid" data-id="' + esc(t.tender_id) + '">Copy ID</button>' +
+      '<button class="share" data-id="' + esc(t.tender_id) + '">Share</button>' +
     '</div>' +
     '<p class="hint">The portal has no direct link to a single tender, so ' +
       'this copies the ID and opens its <b>Active Tenders</b> search. ' +
@@ -441,24 +483,69 @@ function alertCard(e){
 
 const FILTER_LABELS = {
   'f-q': 'Search', 'f-dept': 'Dept', 'f-district': 'District',
-  'f-local': 'Local body', 'f-work': 'Work', 'f-min': 'Min',
-  'f-max': 'Max', 'f-closing': 'Closing within'
+  'f-local': 'Town', 'f-work': 'Work', 'f-band': 'Value',
+  'f-min': 'Min', 'f-max': 'Max', 'f-closing': 'Closing within'
 };
+
+// Counts next to each option tell you where the work actually is, instead
+// of picking a filter and landing on an empty list. Local bodies narrow to
+// the chosen district -- statewide there are 444 of them, which is not a
+// list anyone can use on a phone.
+function buildFilterOptions(){
+  const open = DB.tenders.filter(t => !t._closed);
+  const dist = $('f-district').value;
+  const count = (rows, key) => {
+    const c = {};
+    rows.forEach(t => { const v = t[key]; if (v) c[v] = (c[v]||0)+1; });
+    return c;
+  };
+  const opts = (sel, counts, anyLabel, labeller) => {
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">' + anyLabel + '</option>' +
+      Object.keys(counts).sort().map(k =>
+        '<option value="' + esc(k) + '">' +
+        esc(labeller ? labeller(k) : k) + ' (' + counts[k] + ')</option>').join('');
+    sel.value = keep;
+  };
+  opts($('f-dept'), count(open,'department'), 'All departments', deptLabel);
+  opts($('f-district'), count(open,'district'), 'All districts');
+
+  const workCounts = {};
+  open.forEach(t => (t.work_list||[]).forEach(w => workCounts[w]=(workCounts[w]||0)+1));
+  opts($('f-work'), workCounts, 'All work types');
+
+  const scope = dist ? open.filter(t => t.district === dist) : open;
+  const locals = count(scope, 'local_body');
+  $('local-list').innerHTML = Object.keys(locals).sort()
+    .map(k => '<option value="' + esc(k) + '">' + locals[k] + ' tenders</option>').join('');
+  $('f-local').placeholder = dist
+    ? Object.keys(locals).length + ' in ' + dist + ' — type to search'
+    : 'all — type to search';
+}
 
 function updateSavedCount(){
   $('saved-n').textContent = saved.size ? '(' + saved.size + ')' : '';
 }
 
+function bandRange(){
+  const v = $('f-band').value;
+  if (v === 'custom')
+    return [parseFloat($('f-min').value), parseFloat($('f-max').value)];
+  if (!v) return [NaN, NaN];
+  const [lo, hi] = v.split('-');
+  return [lo ? parseFloat(lo) : NaN, hi ? parseFloat(hi) : NaN];
+}
+
 function renderChips(){
   const bar = $('chips');
   const active = Object.keys(FILTER_LABELS)
-    .filter(id => $(id).value)
+    .filter(id => $(id).value && !(id === 'f-band' && $(id).value === 'custom'))
     .map(id => {
       const el = $(id);
       const shown = el.tagName === 'SELECT'
         ? el.options[el.selectedIndex].textContent
         : el.value;
-      const suffix = (id === 'f-closing') ? ' days' : '';
+      const suffix = (id === 'f-closing' && el.value !== '1') ? ' days' : '';
       return '<span class="fchip">' + esc(FILTER_LABELS[id]) + ': ' +
              esc(shown) + suffix +
              '<button data-clear="' + id + '" aria-label="Remove">\u00d7</button></span>';
@@ -506,7 +593,10 @@ function render(){
     if (m) m.onclick = () => { shownCount += PAGE; render(); };
     return;
   }
-  const {out, closedHidden} = apply();
+  const {out, closedHidden, noValueHidden, amountFiltered} = apply();
+  $('custom-range').hidden = $('f-band').value !== 'custom';
+  $('novalue-wrap').style.display =
+    (amountFiltered && noValueHidden) ? 'flex' : 'none';
   const shown = out.slice(0, shownCount);
   main.innerHTML = shown.length
     ? '<p class="count">' + out.length.toLocaleString() + ' tender' +
@@ -514,6 +604,8 @@ function render(){
       (out.length > shown.length ? ' \u00b7 showing ' + shown.length : '') +
       (closedHidden && !$('f-closed').checked
         ? ' \u00b7 ' + closedHidden + ' closed hidden' : '') +
+      (noValueHidden && !$('f-novalue').checked
+        ? ' \u00b7 ' + noValueHidden + ' with no published value hidden' : '') +
       '</p>' + shown.map(tenderCard).join('') +
       (out.length > shown.length
         ? '<button class="more" id="more">Show ' +
@@ -545,16 +637,20 @@ async function boot(){
   DB.byId = Object.fromEntries(d.tenders.map(t => [t.tender_id, t]));
   DB.events.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
 
-  const depts = uniq(d.tenders,'department');
-  $('f-dept').innerHTML = '<option value="">All departments</option>' +
-    depts.map(c => '<option value="'+esc(c)+'">'+esc(deptLabel(c))+'</option>').join('');
-  fill($('f-district'), uniq(d.tenders,'district'), 'All districts');
-  fill($('f-local'), uniq(d.tenders,'local_body'), 'All local bodies');
-  fill($('f-work'), [...new Set(d.tenders.flatMap(t=>t.work_list))].sort(),
-       'All work types');
-  $('hdr').textContent = d.tenders.length.toLocaleString() + ' tenders \u00b7 ' +
+  buildFilterOptions();
+
+  const freshCount = lastVisit
+    ? d.tenders.filter(t => t.first_seen && t.first_seen > lastVisit).length : 0;
+  const since = lastVisit
+    ? new Date(lastVisit).toLocaleDateString(undefined,
+        {day:'numeric', month:'short'}) : '';
+  $('hdr').innerHTML = d.tenders.length.toLocaleString() + ' tenders \u00b7 ' +
     uniq(d.tenders,'district').length + ' districts \u00b7 updated ' +
-    (d.generated_at||'').slice(0,10);
+    (d.generated_at||'').slice(0,10) +
+    (freshCount ? ' \u00b7 <b style="color:var(--new)">' + freshCount +
+      ' new since ' + esc(since) + '</b>' : '');
+  // Stamp only after rendering, so this visit still shows what changed.
+  stampVisit();
 
   // Say so plainly if the nightly job has not run for a while, rather than
   // quietly showing stale tenders as if they were current.
@@ -573,7 +669,10 @@ let timer;
 document.querySelectorAll('#side select, #side input').forEach(el =>
   el.addEventListener('input', () => {
     clearTimeout(timer);
-    timer = setTimeout(() => { shownCount = PAGE; renderChips(); render(); }, 120);
+    timer = setTimeout(() => {
+      if (el.id === 'f-district') buildFilterOptions();
+      shownCount = PAGE; renderChips(); render();
+    }, 120);
   }));
 $('f-clear').onclick = () => {
   document.querySelectorAll('#side select, #side input').forEach(el => {
@@ -604,7 +703,34 @@ function copyText(text){
   return Promise.resolve();
 }
 
+function shareText(t){
+  const bits = [t.title || 'Tender', ''];
+  if (t.est_amount_raw) bits.push('Value: \u20b9' + t.est_amount_raw);
+  if (t.emd) bits.push('EMD: \u20b9' + t.emd);
+  if (t.closing_date) bits.push('Closes: ' + t.closing_date);
+  if (t.district) bits.push('District: ' + t.district);
+  if (t.local_body) bits.push('Body: ' + t.local_body);
+  bits.push('Tender ID: ' + t.tender_id, '', location.origin + location.pathname);
+  return bits.join('\n');
+}
+
 document.addEventListener('click', e => {
+  const sh = e.target.closest('.share');
+  if (sh){
+    const t = DB.byId[sh.dataset.id];
+    if (!t) return;
+    const text = shareText(t);
+    // Native share sheet where it exists (Android Chrome) -- that is the
+    // one that offers WhatsApp. Otherwise fall back to wa.me directly,
+    // because sharing tenders on WhatsApp is how this actually gets used.
+    if (navigator.share){
+      navigator.share({title: t.title || 'Tender', text}).catch(()=>{});
+    } else {
+      window.open('https://wa.me/?text=' + encodeURIComponent(text),
+                  '_blank', 'noopener');
+    }
+    return;
+  }
   const sv = e.target.closest('.save');
   if (sv){
     const id = sv.dataset.save;
