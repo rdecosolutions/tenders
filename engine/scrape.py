@@ -76,6 +76,34 @@ SELECTORS = {
 
 WINDOWS = {"today": "tab_today", "7": "tab_7day", "14": "tab_14day"}
 
+# The page prints which view it is showing, and we check it -- because
+# clicking a tab is not enough. The portal swallows the first click and
+# stays on "Closing Today", which has rows of its own, so a "did rows
+# appear?" test passes while we quietly scrape a tenth of the window. That
+# is what happened for days, with every run reporting success.
+WINDOW_HEADINGS = {
+    "today": "closing today",
+    "7": "closing within 7 days",
+    "14": "closing within 14 days",
+}
+
+
+def current_window(page) -> str:
+    """Whichever view the portal says it is showing, lowercased, or ''."""
+    try:
+        text = " ".join(page.inner_text("body").split()).lower()
+    except Exception:
+        return ""
+    m = re.search(
+        r"tenders/auctions (closing [a-z0-9 ]+?)(?: tenders/auctions| search)",
+        text)
+    return m.group(1).strip() if m else ""
+
+
+def on_window(page, window: str) -> bool:
+    want = WINDOW_HEADINGS.get(window, "")
+    return bool(want) and current_window(page).startswith(want)
+
 TENDER_ID_RE = re.compile(r"\d{4}_[A-Za-z&]+_\d+_\d+")
 SNO_RE = re.compile(r"^\d+\.$")
 
@@ -417,20 +445,18 @@ def _open_listing(page, window: str) -> None:
                 f"Could not find the '{window} day' tab ({SELECTORS[key]}). "
                 "The portal layout may have changed — re-run with --probe."
             )
-        ok = _click_and_wait(page, tab)
-        if not ok:
-            # Same transient failure can hit the tab switch. One clean retry
-            # from the top before giving up.
-            time.sleep(THROTTLE_SECONDS * 6)
-            _goto_with_retry(page, LIST_URL)
-            _wait_for_rows(page, timeout=20_000)
-            tab = page.query_selector(SELECTORS[key])
-            ok = tab is not None and _click_and_wait(page, tab)
-        if not ok:
+        # Click until the heading agrees, not merely until rows exist.
+        for _attempt in range(5):
+            _click_and_wait(page, tab)
+            if on_window(page, window):
+                break
+            time.sleep(THROTTLE_SECONDS)
+            tab = page.query_selector(SELECTORS[key]) or tab
+        if not on_window(page, window):
             raise RuntimeError(
-                f"The '{window} day' tab loaded no rows after retries. Either "
-                "the portal is refusing this IP, or it has added a CAPTCHA "
-                "here too. Run engine/diagnose.py to see which."
+                f"Could not switch to the '{window} day' view — the portal is "
+                f"still showing '{current_window(page) or 'unknown'}'. "
+                f"Refusing to scrape the wrong window and call it a success."
             )
 
 
