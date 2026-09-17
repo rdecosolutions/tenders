@@ -127,6 +127,13 @@
   .tag{font-size:12.5px;color:var(--muted);margin-top:3px;max-width:52ch}
   .lakh{font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
   .content{min-width:0}
+  /* Sorting lives above the results, not inside the collapsed filter
+     panel: it is a property of the list you are looking at, and hiding it
+     behind "More filters" made it effectively undiscoverable. */
+  .sortbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;
+    margin-bottom:10px}
+  .sortbar label{margin:0;font-size:12.5px;white-space:nowrap}
+  .sortbar select{width:auto;min-width:168px;padding:6px 9px;font-size:13px}
   .chipbar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
   .chipbar:empty{display:none}
   .fchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
@@ -227,12 +234,6 @@
     <input id="f-local" list="local-list" placeholder="all — type to search">
     <datalist id="local-list"></datalist>
     <label>Work type</label><select id="f-work"></select>
-    <label>Sort by</label>
-    <select id="f-sort">
-      <option value="closing">Closing soonest</option>
-      <option value="newest">Recently published</option>
-      <option value="value">Highest value</option>
-    </select>
     <label>Estimated value</label>
     <select id="f-band">
       <option value="">Any value</option>
@@ -280,6 +281,14 @@
     </div>
   </aside>
   <div class="content">
+    <div class="sortbar">
+      <label for="f-sort">Sort by</label>
+      <select id="f-sort">
+        <option value="closing">Closing soonest</option>
+        <option value="newest">Recently published</option>
+        <option value="value">Highest value</option>
+      </select>
+    </div>
     <div id="chips" class="chipbar"></div>
     <main id="main"><div class="empty">Loading tenders&hellip;</div></main>
   </div>
@@ -645,7 +654,8 @@ function renderChips(){
 }
 
 function clearAll(){
-  document.querySelectorAll('#side select, #side input').forEach(el => {
+  document.querySelectorAll('#side select, #side input, .sortbar select')
+  .forEach(el => {
     if (el.type === 'checkbox') el.checked = false;
     else if (el.id !== 'f-sort') el.value = '';
   });
@@ -761,7 +771,8 @@ async function boot(){
 }
 
 let timer;
-document.querySelectorAll('#side select, #side input').forEach(el =>
+document.querySelectorAll('#side select, #side input, .sortbar select')
+  .forEach(el =>
   el.addEventListener('input', () => {
     clearTimeout(timer);
     timer = setTimeout(async () => {
