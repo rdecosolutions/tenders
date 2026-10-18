@@ -82,6 +82,11 @@
     background:var(--bg);border:1px solid var(--line);border-radius:5px;
     padding:3px 8px;margin:0 6px 5px 0}
   .docsz{color:var(--muted);font-size:11px}
+  .lock{display:block;font-size:11px;color:var(--muted);margin-top:2px;
+    cursor:help}
+  .planner{display:flex;align-items:center;gap:8px;margin:10px 0 4px}
+  .planner input{width:120px;padding:6px 8px;font-size:13px}
+  .planner label{margin:0;font-size:12.5px}
   .na{color:var(--muted);font-style:italic;font-size:12.5px}
   .est{color:var(--ink)}
   .esttag{font-size:10px;font-weight:700;text-transform:uppercase;
@@ -590,7 +595,12 @@ function tenderCard(t){
               + 'This is derived from the EMD, which is set at 1% of the '
               + 'tender value.">est.</span></span>'
             : money('')) + '</dd></div>' +
-      '<div><dt>Deposit (EMD)</dt><dd>' + money(esc(t.emd)) + '</dd></div>' +
+      '<div><dt>Deposit (EMD)</dt><dd>' + money(esc(t.emd)) +
+        (t.bid_validity && /^\d+$/.test(String(t.bid_validity))
+          ? '<span class="lock" title="EMD is not released at closing. It is '
+            + 'held for the bid validity period, so this money is tied up '
+            + 'for that long whether you win or lose.">locked ~' +
+            esc(t.bid_validity) + 'd</span>' : '') + '</dd></div>' +
       (t.tender_category || t.tender_type
         ? '<div><dt>Contract</dt><dd>' +
           esc([t.tender_category, t.tender_type].filter(Boolean).join(' \u00b7 ')) +
@@ -997,6 +1007,47 @@ function renderDash(){
              const es = open.map(emdOf).filter(v => v); 
              return es.length ? rupee(median(es)) : '\u2014'; })()]])));
 
+  // --- how many of these can you actually afford to chase
+  // The binding constraint for a small contractor is not finding work, it
+  // is EMD capital: every live bid ties up a deposit for the whole bid
+  // validity period, typically 90 days. Nobody tells them how far their
+  // money goes, so they guess.
+  const budget = parseFloat(localStorage.getItem('tn-emd-budget') || '') || 0;
+  const bySmallest = open
+    .map(t => ({t, e: emdOf(t)}))
+    .filter(x => x.e > 0)
+    .sort((a, b) => a.e - b.e);
+  // Greedy cheapest-first maximises a meaningless number -- it answered
+  // "471 tenders" for 5 lakh by filling up on 80-rupee shop rentals, which
+  // nobody is going to chase. How many bids the budget supports AT THE
+  // TYPICAL DEPOSIT is the question actually being asked.
+  const medEmd = bySmallest.length ? median(bySmallest.map(x => x.e)) : 0;
+  const afford = (budget && medEmd) ? Math.floor(budget / medEmd) : 0;
+  const lockDays = (() => {
+    const v = open.map(t => parseInt(t.bid_validity, 10)).filter(n => n > 0);
+    return v.length ? Math.round(median(v)) : null;
+  })();
+  P.push(panel('How far your deposit money goes',
+    'Every live bid locks up its EMD for the whole bid validity period, not just until closing. This is usually what limits how many tenders you can chase at once.',
+    '<div class="planner"><label for="emd-budget">I have</label>' +
+    '<input id="emd-budget" type="number" inputmode="numeric" placeholder="e.g. 500000" value="' +
+    (budget || '') + '"><label>for deposits</label></div>' +
+    (budget
+      ? '<div class="big">' + afford + '</div>' +
+        '<p class="why">bids you could run at once, at the typical ' +
+        rupee(medEmd) + ' deposit for this selection' +
+        (lockDays ? ', each tied up about ' + lockDays + ' days' : '') +
+        '. Narrow the filters to the work you actually bid on and this ' +
+        'becomes a real number.</p>'
+      : '<p class="why">Enter a figure to see how many simultaneous bids it ' +
+        'supports across these ' + bySmallest.length + ' tenders' +
+        (lockDays ? ', and how long each deposit stays locked (about '
+          + lockDays + ' days)' : '') + '.</p>') +
+    rows([['Smallest deposit', bySmallest.length ? rupee(bySmallest[0].e) : '\u2014'],
+          ['Median deposit', bySmallest.length ? rupee(median(bySmallest.map(x=>x.e))) : '\u2014'],
+          ['All of them would need', bySmallest.length
+             ? rupee(bySmallest.reduce((a,x)=>a+x.e,0)) : '\u2014']])));
+
   // --- whose deadlines are meaningless
   const totalBy = {}, extBy = {};
   out.forEach(t => { if (t.local_body) totalBy[t.local_body] = (totalBy[t.local_body]||0)+1; });
@@ -1054,6 +1105,17 @@ function renderDash(){
     (wk[wk.length-1]||[''])[0] + '</span></div>', true));
 
   d.innerHTML = P.join('');
+  const be = $('emd-budget');
+  if (be) be.oninput = () => {
+    try { localStorage.setItem('tn-emd-budget', be.value); } catch (_) {}
+    clearTimeout(be._t);
+    be._t = setTimeout(() => {
+      const keep = be.value;
+      renderDash();
+      const again = $('emd-budget');
+      if (again) { again.value = keep; again.focus(); }
+    }, 400);
+  };
 }
 
 function render(){

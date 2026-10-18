@@ -476,6 +476,11 @@ DETAIL_FIELDS = {
     "NDA/Pre Qualification": "eligibility",
     "Tenderer Class": "tenderer_class",
     "Period Of Work(Days)": "period_of_work",
+    # EMD is not released at closing -- it is held for the bid validity
+    # period, typically 90 days. For a contractor whose capital limits how
+    # many bids they can run at once, that is the number that matters.
+    "Bid Validity(Days)": "bid_validity",
+    "Bid Submission Start Date": "bid_start",
     "Organisation Chain": "org_chain",
     "Tender Reference Number": "ref_number",
     "Tender ID": "tender_id_detail",
@@ -574,7 +579,7 @@ def _apply_detail(row: dict, detail: dict) -> None:
     row["work_description"] = detail.get("work_description", "")
     for field in ("tender_category", "tender_type", "tenderer_class",
                   "product_category", "sub_category", "period_of_work",
-                  "documents"):
+                  "documents", "bid_validity", "bid_start"):
         row[field] = detail.get(field, "")
     row["pincode"] = detail.get("pincode", "")
 

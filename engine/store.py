@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS tenders (
     sub_category    TEXT,
     period_of_work  TEXT,
     documents       TEXT,          -- "name|KB;name|KB" from the detail page
+    bid_validity    TEXT,          -- days the EMD stays locked up
+    bid_start       TEXT,          -- when submission opens
     work_description TEXT,         -- detail-page description; the classifier
                                    -- needs it, and without storing it a later
                                    -- re-tag can only see the title
@@ -113,7 +115,8 @@ def _migrate(conn) -> None:
     for col in ("org_chain", "circle", "location", "pincode", "opening_date",
                 "work_description", "tender_category", "tender_type",
                 "tenderer_class", "product_category", "sub_category",
-                "period_of_work", "documents"):
+                "period_of_work", "documents", "bid_validity",
+                "bid_start"):
         if col not in have:
             conn.execute(f"ALTER TABLE tenders ADD COLUMN {col} TEXT")
     conn.commit()
@@ -277,6 +280,8 @@ def upsert(conn, t: dict) -> list[str]:
             "sub_category=COALESCE(NULLIF(?,''), sub_category), "
             "period_of_work=COALESCE(NULLIF(?,''), period_of_work), "
             "documents=COALESCE(NULLIF(?,''), documents), "
+            "bid_validity=COALESCE(NULLIF(?,''), bid_validity), "
+            "bid_start=COALESCE(NULLIF(?,''), bid_start), "
             "last_seen=?, last_hash=? WHERE tender_id=?",
             (t.get("title"), t.get("est_amount"), t.get("est_amount_raw"),
              t.get("closing_date"), t.get("opening_date"), t.get("emd"),
@@ -287,6 +292,7 @@ def upsert(conn, t: dict) -> list[str]:
              t.get("tender_type"), t.get("tenderer_class"),
              t.get("product_category"), t.get("sub_category"),
              t.get("period_of_work"), t.get("documents"),
+             t.get("bid_validity"), t.get("bid_start"),
              now, new_hash, t["tender_id"]),
         )
     else:
@@ -305,6 +311,8 @@ def upsert(conn, t: dict) -> list[str]:
             "sub_category=COALESCE(NULLIF(?,''), sub_category), "
             "period_of_work=COALESCE(NULLIF(?,''), period_of_work), "
             "documents=COALESCE(NULLIF(?,''), documents), "
+            "bid_validity=COALESCE(NULLIF(?,''), bid_validity), "
+            "bid_start=COALESCE(NULLIF(?,''), bid_start), "
             "location=COALESCE(NULLIF(?,''), location), "
             "pincode=COALESCE(NULLIF(?,''), pincode) "
             "WHERE tender_id=?",
@@ -312,6 +320,7 @@ def upsert(conn, t: dict) -> list[str]:
              t.get("tender_type"), t.get("tenderer_class"),
              t.get("product_category"), t.get("sub_category"),
              t.get("period_of_work"), t.get("documents"),
+             t.get("bid_validity"), t.get("bid_start"),
              t.get("location"), t.get("pincode"),
              t["tender_id"]))
 
