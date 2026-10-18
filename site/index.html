@@ -79,6 +79,10 @@
     padding:16px 18px;margin-bottom:11px;position:relative}
   .card h3{padding-right:34px}
   .na{color:var(--muted);font-style:italic;font-size:12.5px}
+  .est{color:var(--ink)}
+  .esttag{font-size:10px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--muted);border:1px solid var(--line);
+    border-radius:4px;padding:1px 4px;margin-left:6px;cursor:help}
   .card.fresh{border-color:var(--new)}
   .newflag{position:absolute;top:-1px;left:16px;background:var(--new);
     color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.05em;
@@ -374,7 +378,17 @@ function parseDate(s){
 }
 function amount(t){
   const n = parseFloat(String(t.est_amount_raw||'').replace(/[^0-9.]/g,''));
-  return isNaN(n) ? null : n;
+  if (!isNaN(n)) return n;
+  // Fall back to the figure derived from the EMD, so the ~2,000 tenders the
+  // portal left blank are no longer silently dropped by a value filter.
+  return t.est_from_emd ? t.est_from_emd : null;
+}
+// Indian digit grouping: 1,92,500 not 192,500.
+function inr(n){
+  const s = String(Math.round(n));
+  if (s.length <= 3) return s;
+  const last3 = s.slice(-3), rest = s.slice(0, -3);
+  return rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3;
 }
 function fill(sel, items, anyLabel){
   sel.innerHTML = '<option value="">' + anyLabel + '</option>' +
@@ -487,7 +501,14 @@ function tenderCard(t){
     (words ? '<p class="closing' + (urgent ? ' urgent' : '') + '">' + words +
        ' \u00b7 ' + esc(t.closing_date) + '</p>' : '') +
     '<dl>' +
-      '<div><dt>Estimated value</dt><dd>' + money(esc(t.est_amount_raw)) + '</dd></div>' +
+      '<div><dt>Estimated value</dt><dd>' +
+        (t.est_amount_raw ? money(esc(t.est_amount_raw))
+          : t.est_from_emd
+            ? '<span class="est">~\u20b9' + inr(t.est_from_emd) +
+              '<span class="esttag" title="The portal published no value. '
+              + 'This is derived from the EMD, which is set at 1% of the '
+              + 'tender value.">est.</span></span>'
+            : money('')) + '</dd></div>' +
       '<div><dt>Deposit (EMD)</dt><dd>' + money(esc(t.emd)) + '</dd></div>' +
       '<div><dt>Tender fee</dt><dd>' + money(esc(t.tender_fee)) + '</dd></div>' +
       '<div><dt>District</dt><dd>' + (esc(t.district)||'\u2014') + '</dd></div>' +

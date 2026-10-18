@@ -97,6 +97,8 @@ def dump(conn) -> dict:
                           and (e.get("created_at") or "")[:10] in backfill_days)]
 
     slim = [{k: v for k, v in t.items() if k not in SITE_SKIP} for t in tenders]
+    for t in slim:
+        _add_estimated_value(t)
     horizon = datetime.now() - timedelta(days=ARCHIVE_AFTER_DAYS)
     live, archive = [], []
     for t in slim:
@@ -121,6 +123,46 @@ def dump(conn) -> dict:
     return {"tenders": len(tenders), "events": len(events),
             "site_events": len(recent), "live": len(live),
             "archived": len(archive)}
+
+
+# The portal leaves the tender value blank on about a quarter of tenders,
+# but it almost always publishes the EMD, and the EMD is set at 1% of the
+# value: across 8,298 tenders where both are known the median error of
+# value = EMD x 100 is 0.0%, and 88% land within 20%. So for the ~2,570
+# tenders with an EMD and no value we can state a figure the portal never
+# published. It is written to a SEPARATE field, never to est_amount_raw --
+# that is portal data and sits in the change-detection hash, so writing a
+# derived number into it would raise a phantom corrigendum for every one.
+EMD_PERCENT_OF_VALUE = 1.0
+
+# Not every "EMD" is 1% -- a few are flat fees or mis-entered, and those
+# produce nonsense (an EMD of 10 crore implied a 1,000 crore tender). Real
+# published values reach 211 crore at the very top, with the 99.9th
+# percentile at 17.5 crore, so anything implying more than 20 crore is
+# rejected rather than shown. That drops 23 of 2,102 estimates. Blank beats
+# wrong, the same rule used for districts.
+ESTIMATE_CEILING = 200_000_000
+
+
+def _money(raw) -> float | None:
+    digits = "".join(c for c in str(raw or "") if c.isdigit() or c == ".")
+    try:
+        return float(digits) if digits else None
+    except ValueError:
+        return None
+
+
+def _add_estimated_value(t: dict) -> None:
+    """Fill est_from_emd when the portal published an EMD but no value."""
+    if _money(t.get("est_amount_raw")):
+        return
+    emd = _money(t.get("emd"))
+    if not emd or emd <= 0:
+        return
+    estimate = round(emd * 100.0 / EMD_PERCENT_OF_VALUE)
+    if estimate > ESTIMATE_CEILING:
+        return
+    t["est_from_emd"] = estimate
 
 
 def _days_ago(days: int) -> str:
