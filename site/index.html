@@ -108,6 +108,10 @@
   .badge.extended{background:var(--extended)}
   .badge.retendered{background:var(--retendered)}
   .badge.cancelled{background:var(--cancelled)}
+  .pos{margin:0 0 8px;font-size:12.5px;font-weight:600}
+  .pos.hi{color:var(--cancelled)} .pos.lo{color:var(--new)}
+  .pos.mid{color:var(--muted)}
+  .posbasis{font-weight:400;color:var(--muted);font-size:11.5px}
   .closing{margin:0 0 11px;font-size:13.5px;font-weight:600;color:var(--ink)}
   .closing.urgent{color:var(--cancelled)}
   .act{display:flex;align-items:center;gap:9px;flex-wrap:wrap;
@@ -539,6 +543,13 @@ function tenderCard(t){
       (t.status && t.status!=='active'
         ? '<span class="chip grey">' + esc(t.status) + '</span>' : '') +
     '</div>' +
+    (() => { const pp = pricePosition(t); return pp
+        ? '<p class="pos ' + (pp.pct >= 15 ? 'hi' : pp.pct <= -15 ? 'lo' : 'mid') +
+          '" title="Compared with the median of everything we have recorded for ' +
+          esc(pp.basis) + '">' + esc(pp.label) +
+          (pp.pct ? ' \u00b7 ' + (pp.pct > 0 ? '+' : '') + pp.pct + '%' : '') +
+          ' <span class="posbasis">vs ' + esc(pp.basis) + '</span></p>'
+        : ''; })() +
     (words ? '<p class="closing' + (urgent ? ' urgent' : '') + '">' + words +
        ' \u00b7 ' + esc(t.closing_date) + '</p>' : '') +
     '<dl>' +
@@ -740,6 +751,46 @@ function clearAll(){
 // what work is normally worth, who keeps buying it, and whose deadlines
 // actually hold. Panels respect the current filters, so the answers are
 // about YOUR kind of work, not the whole state.
+// Price position: is this tender priced normally for its kind of work in
+// its district? The portal cannot answer that -- it deletes closed tenders,
+// so it has no history to compare against. We do. Benchmarks are built once
+// per load and cached.
+let BENCH = null;
+function buildBench(){
+  const cells = {};
+  DB.tenders.forEach(t => {
+    const v = amount(t);
+    if (!v || !t.district) return;
+    (t.work_list||[]).forEach(w => {
+      const k = w + '|' + t.district;
+      (cells[k] = cells[k] || []).push(v);
+    });
+  });
+  BENCH = {};
+  for (const k in cells){
+    if (cells[k].length >= 5) BENCH[k] = median(cells[k]);
+  }
+}
+// Returns {label, pct, basis} or null when we have no comparable work.
+function pricePosition(t){
+  if (!BENCH) buildBench();
+  const v = amount(t);
+  if (!v || !t.district) return null;
+  let best = null;
+  (t.work_list||[]).forEach(w => {
+    const m = BENCH[w + '|' + t.district];
+    if (m && (!best || m > best.m)) best = {m, w};
+  });
+  if (!best) return null;
+  const pct = Math.round((v - best.m) / best.m * 100);
+  const label = pct >= 40 ? 'well above typical'
+              : pct >= 15 ? 'above typical'
+              : pct <= -40 ? 'well below typical'
+              : pct <= -15 ? 'below typical'
+              : 'about typical';
+  return {label, pct, basis: best.w + ' in ' + t.district};
+}
+
 function median(xs){
   if (!xs.length) return null;
   const a = [...xs].sort((x,y) => x-y);
@@ -821,6 +872,55 @@ function renderDash(){
     '<div class="big">' + extended.size + '</div>' +
     '<p class="why">deadline moves recorded in your selection</p>' +
     rows(worst)));
+
+  // --- what bidding would actually cost you in deposits
+  // Every bid locks up an EMD. Nobody tells you the total, and for a small
+  // contractor it is the real constraint on how many tenders they can chase.
+  const emdOf = t => {
+    const n = parseFloat(String(t.emd||'').replace(/[^0-9.]/g,''));
+    return isNaN(n) ? 0 : n;
+  };
+  const windowEmd = n => {
+    const set = open.filter(t => t._d && (t._d - now) <= n*864e5);
+    return [set.length, set.reduce((a,t) => a + emdOf(t), 0)];
+  };
+  const [n7, e7] = windowEmd(7);
+  const [n14, e14] = windowEmd(14);
+  P.push(panel('Deposits you would need',
+    'Total EMD locked up if you bid on every matching tender. The portal never adds this up, and it is usually the real limit on how many you can chase.',
+    '<div class="big">' + (e7 ? rupee(e7) : '\u2014') + '</div>' +
+    '<p class="why">across ' + n7 + ' tenders closing within 7 days</p>' +
+    rows([['Within 14 days', n14 + ' tenders \u00b7 ' + (e14 ? rupee(e14) : '\u2014')],
+          ['Median deposit', (() => {
+             const es = open.map(emdOf).filter(v => v); 
+             return es.length ? rupee(median(es)) : '\u2014'; })()]])));
+
+  // --- whose deadlines are meaningless
+  const totalBy = {}, extBy = {};
+  out.forEach(t => { if (t.local_body) totalBy[t.local_body] = (totalBy[t.local_body]||0)+1; });
+  extended.forEach(id => {
+    const t = DB.byId[id];
+    if (t && t.local_body) extBy[t.local_body] = (extBy[t.local_body]||0)+1;
+  });
+  const reliability = Object.keys(totalBy)
+    .filter(b => totalBy[b] >= 10)
+    .map(b => [b, Math.round(100*(extBy[b]||0)/totalBy[b]), totalBy[b]])
+    .filter(r => r[1] > 0)
+    .sort((a,b) => b[1]-a[1]).slice(0, 7);
+  P.push(panel('Whose deadlines slip',
+    'Share of this body\u2019s tenders whose closing date we watched move. A high number means the published deadline is soft \u2014 useful both ways.',
+    rows(reliability.map(r => [r[0], r[1] + '% of ' + r[2]]))));
+
+  // --- where the money actually is
+  const spendBy = {};
+  out.forEach(t => {
+    const v = amount(t);
+    if (v && t.local_body) spendBy[t.local_body] = (spendBy[t.local_body]||0)+v;
+  });
+  const spend = Object.entries(spendBy).sort((a,b) => b[1]-a[1]).slice(0, 7);
+  P.push(panel('Where the money is',
+    'Combined tender value per body in your selection, including values we derived from the EMD. Volume and spend are not the same thing.',
+    rows(spend, v => rupee(v))));
 
   // --- publishing rhythm
   const weeks = {};
