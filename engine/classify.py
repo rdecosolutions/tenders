@@ -149,14 +149,16 @@ WORK_CATEGORIES = {
         "manhole", "man hole", "sewage treatment", "stp", "septage",
     ],
     "Drainage": [
-        "drainage", "storm water", "storm-water", "strom water", "open drain",
-        "side drain", "soak pit", "soakpit", "soakage pit", "culvert",
+        "drainage", "storm water", "storm-water", "strom water", "drain",
+        "drains", "open drain", "side drain", "soak pit", "soakpit",
+        "soakage pit", "culvert",
         "desilting", "de-silting", "silt removal", "gully", "main channel",
     ],
     "Roads (BT)": [
         "bt road", "bituminous", "b.t road", "black top", "blacktop",
         "wbm", "premix", "bt patch", "bt patches", "patch work",
-        "pot hole", "pothole",
+        "pot hole", "pothole", "potholes", "patches", "restoration of bt",
+        "bt road work",
     ],
     "Roads (CC)": [
         # "CC pavement" is how RD&PR actually writes concrete roads, and it
@@ -184,14 +186,19 @@ WORK_CATEGORIES = {
         "solid waste", "swm", "fresh waste", "waste processing",
         "garbage", "compost", "mcf", "micro compost", "godardhaan",
         "gobardhan", "segregation shed", "waste to energy", "dumping yard",
-        "transfer station",
+        "transfer station", "baling machine", "bailing machine", "rrc",
+        "resource recovery",
     ],
     # Municipal and panchayat greenery work is a steady category of its own:
     # parks, playgrounds, avenue planting, burial grounds, and the removal
     # of seemai karuvelam, the invasive tree Tamil Nadu bodies tender for
     # clearing constantly.
     "Parks & Greenery": [
-        "park", "parks", "playground", "play ground", "play material",
+        # Bare "park" matched a location mentioned in the work description
+        # -- an electrical kiosk replacement and a monsoon-precaution job
+        # both came back as greenery work. Require park-specific phrasing.
+        "public park", "childrens park", "children park", "park at",
+        "park in", "parks", "playground", "play ground", "play material",
         "plantation", "avenue tree", "greenery", "garden", "burial ground",
         "cremation", "seemai karuvelam", "seemaikaruvelam", "karuvelam",
         "tree cutting", "tree removal",
@@ -230,14 +237,19 @@ WORK_CATEGORIES = {
     # "Rental Charges for Block F Shop No 49" — and it is not construction
     # at all, so a contractor almost certainly wants to filter it OUT.
     "Shop & Property Rental": [
-        "shop", "shops", "rental charges", "monthly rent", "daily market",
+        # "shop" alone matched "construction of a new shopping mall", which
+        # is building work, not a letting. Found by manually checking a
+        # sample -- coverage statistics would never have shown it.
+        "shop rent", "shops rent", "rent for shop", "shop no",
+        "rental charges", "monthly rent", "daily market",
         "vegetable market", "lease", "licence fee", "license fee",
         "license to charge", "parking lot", "bus stand", "market stall",
         "rent for", "auction of", "e-auction", "allotment of space",
     ],
     "Street Lighting": [
         "street light", "streetlight", "street lamp", "lamp post",
-        "led fitting", "high mast", "mast light", "mini mast",
+        "led fitting", "high mast", "hi mast", "himast", "mast light",
+        "mini mast", "mini hi mast",
         "solar light", "solar panel", "solar street",
     ],
     "Electrical Works": [
