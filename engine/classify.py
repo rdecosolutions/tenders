@@ -159,8 +159,12 @@ WORK_CATEGORIES = {
         "pot hole", "pothole",
     ],
     "Roads (CC)": [
+        # "CC pavement" is how RD&PR actually writes concrete roads, and it
+        # was the single biggest gap: hundreds of tenders went untagged
+        # because the list only knew "cement concrete pavement".
         "cc road", "c.c road", "cement concrete road", "concrete road",
-        "cement concrete pavement",
+        "cement concrete pavement", "cc pavement", "c.c pavement",
+        "wearing coat", "cc flooring",
     ],
     "Roads (General)": [
         "road work", "road works", "improvements road", "road from",
@@ -179,7 +183,25 @@ WORK_CATEGORIES = {
     "Solid Waste Management": [
         "solid waste", "swm", "fresh waste", "waste processing",
         "garbage", "compost", "mcf", "micro compost", "godardhaan",
-        "gobardhan",
+        "gobardhan", "segregation shed", "waste to energy", "dumping yard",
+        "transfer station",
+    ],
+    # Municipal and panchayat greenery work is a steady category of its own:
+    # parks, playgrounds, avenue planting, burial grounds, and the removal
+    # of seemai karuvelam, the invasive tree Tamil Nadu bodies tender for
+    # clearing constantly.
+    "Parks & Greenery": [
+        "park", "parks", "playground", "play ground", "play material",
+        "plantation", "avenue tree", "greenery", "garden", "burial ground",
+        "cremation", "seemai karuvelam", "seemaikaruvelam", "karuvelam",
+        "tree cutting", "tree removal",
+    ],
+    # The flow doc only anticipated temple cars. Real HR&CE work is far
+    # wider: mandapams, gopurams, feeding rooms, lamps, temple buildings.
+    "Temple Works": [
+        "temple", "arulmigu", "mandapam", "mandabam", "mudimandabam",
+        "gopuram", "kumbabishekam", "vilakku", "thiruppani", "prakaram",
+        "devasthanam", "temple car", "ther",
     ],
     "Sanitation & Public Health": [
         "sanitary worker", "sanitary workers", "public health",
@@ -196,7 +218,9 @@ WORK_CATEGORIES = {
     "Civil Works": [
         "civil work", "compound wall", "renovation", "repair", "repairs",
         "rcc", "reinforced cement concrete", "construction of",
-        "constraction of", "constuction of", "const of", "improvement",
+        "constraction of", "constuction of", "constrution of", "const of",
+        "retaining wall", "annual maintenance", "bus stop", "bus shelter",
+        "improvement",
         "improvements", "upgradation", "restoration", "strengthening",
         "dismantling", "dismanling", "raising", "reconstruction",
         "landscape", "sluice",
@@ -213,7 +237,8 @@ WORK_CATEGORIES = {
     ],
     "Street Lighting": [
         "street light", "streetlight", "street lamp", "lamp post",
-        "led fitting", "high mast", "solar light",
+        "led fitting", "high mast", "mast light", "mini mast",
+        "solar light", "solar panel", "solar street",
     ],
     "Electrical Works": [
         "electrical maintenance", "electrical work", "electrical works",
