@@ -1,0 +1,93 @@
+name: Fast poll
+
+# The nightly sweep sees a tender only once its DEADLINE falls within 14
+# days, which made us a median of 3.8 days late. The portal's homepage is
+# the one page with no CAPTCHA that lists the newest tenders, so polling it
+# every half hour cuts that to minutes. It costs about two requests a poll
+# once the link cache is warm.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+# Its own group: the nightly sweep runs for an hour and must not be
+# cancelled by a poll, and two polls must not commit over each other.
+concurrency:
+  group: fast-poll
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright and Chromium
+        run: |
+          pip install --quiet playwright
+          playwright install --with-deps chromium
+
+      - name: Rebuild the database from the committed data
+        run: python3 engine/export.py --restore
+
+      - name: Poll the homepage for newly published tenders
+        run: python3 engine/latest.py | tee "$GITHUB_STEP_SUMMARY"
+
+      - name: Write the data back out
+        run: python3 engine/export.py --dump
+        env:
+          BUILD_ID: ${{ github.sha }}
+
+      - name: Stamp the build id into the page
+        run: sed -i "s/__BUILD__/${GITHUB_SHA}/" site/index.html
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name  "tn-tender-bot"
+          git config user.email "actions@github.com"
+          git add data/tenders.ndjson data/events.ndjson data/seen_links.json
+          if git diff --staged --quiet; then
+            echo "Nothing new this poll."
+          else
+            git commit -m "Fast poll: $(date -u +'%Y-%m-%d %H:%M')"
+            # The nightly sweep may have pushed while we were running.
+            git pull --rebase --autostash origin main || true
+            git push
+          fi
+
+      - name: Notify about anything new
+        if: always()
+        continue-on-error: true
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          PUSH_SUBSCRIPTIONS: ${{ secrets.PUSH_SUBSCRIPTIONS }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          VAPID_SUBJECT: mailto:kim@piperocket.digital
+          SITE_URL: https://tenders.rdecosolutions.org/
+          NOTIFY_HOURS: "1"
+        run: |
+          if [ -z "$VAPID_PRIVATE_KEY" ] && [ -z "$NTFY_TOPIC" ]; then
+            echo "No notification channel configured yet - skipping."
+            exit 0
+          fi
+          pip install --quiet pywebpush
+          printf '%s' "$VAPID_PRIVATE_KEY" > vapid_private_key.pem
+          python3 engine/notify.py || true
+          rm -f vapid_private_key.pem
+
+      - name: Check the page structure
+        run: python3 site/check_layout.py site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4

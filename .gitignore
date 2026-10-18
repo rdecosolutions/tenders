@@ -1,6 +1,9 @@
 # The SQLite database is a working file, rebuilt from the NDJSON below.
 # Never commit it: git stores a fresh ~2 MB copy of a binary every night,
 # whereas the sorted text version diffs to a few KB.
+# The fast poller's link cache must persist between runs.
+!data/seen_links.json
+
 data/*.db
 data/*.db-wal
 data/*.db-shm
