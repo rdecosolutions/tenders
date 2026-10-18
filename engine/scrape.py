@@ -542,6 +542,9 @@ def _apply_detail(row: dict, detail: dict) -> None:
     ) or row.get("district", "")
     row["location"] = detail.get("location", "")
     row["work_description"] = detail.get("work_description", "")
+    for field in ("tender_category", "tender_type", "tenderer_class",
+                  "product_category", "sub_category", "period_of_work"):
+        row[field] = detail.get(field, "")
     row["pincode"] = detail.get("pincode", "")
 
     if detail.get("_has_corrigendum"):

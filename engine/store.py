@@ -38,6 +38,16 @@ CREATE TABLE IF NOT EXISTS tenders (
     district        TEXT,
     local_body      TEXT,          -- town / municipality / panchayat
     org_chain       TEXT,          -- full GePNIC organisation chain
+    tender_category TEXT,          -- the PORTAL's own Works/Goods/Services
+                                   -- split, which is authoritative where our
+                                   -- keyword tags are only a guess
+    tender_type     TEXT,          -- Open / Limited / EOI. "Limited" is
+                                   -- invitation-only: you cannot bid on it,
+                                   -- so showing it is pure noise
+    tenderer_class  TEXT,          -- registration class the bidder needs
+    product_category TEXT,
+    sub_category    TEXT,
+    period_of_work  TEXT,
     work_description TEXT,         -- detail-page description; the classifier
                                    -- needs it, and without storing it a later
                                    -- re-tag can only see the title
@@ -100,7 +110,9 @@ def _migrate(conn) -> None:
     """Add any columns a database created by an older version is missing."""
     have = set(_table_columns(conn))
     for col in ("org_chain", "circle", "location", "pincode", "opening_date",
-                "work_description"):
+                "work_description", "tender_category", "tender_type",
+                "tenderer_class", "product_category", "sub_category",
+                "period_of_work"):
         if col not in have:
             conn.execute(f"ALTER TABLE tenders ADD COLUMN {col} TEXT")
     conn.commit()
@@ -257,18 +269,47 @@ def upsert(conn, t: dict) -> list[str]:
             # Keep the stored description when this run skipped the detail
             # page and so has nothing to offer.
             "work_description=COALESCE(NULLIF(?,''), work_description), "
+            "tender_category=COALESCE(NULLIF(?,''), tender_category), "
+            "tender_type=COALESCE(NULLIF(?,''), tender_type), "
+            "tenderer_class=COALESCE(NULLIF(?,''), tenderer_class), "
+            "product_category=COALESCE(NULLIF(?,''), product_category), "
+            "sub_category=COALESCE(NULLIF(?,''), sub_category), "
+            "period_of_work=COALESCE(NULLIF(?,''), period_of_work), "
             "last_seen=?, last_hash=? WHERE tender_id=?",
             (t.get("title"), t.get("est_amount"), t.get("est_amount_raw"),
              t.get("closing_date"), t.get("opening_date"), t.get("emd"),
              t.get("tender_fee"), t.get("eligibility"), t.get("status"),
              t.get("work_categories"), t.get("district"), t.get("local_body"),
              t.get("org_chain"), t.get("location"), t.get("pincode"),
-             t.get("work_description"),
+             t.get("work_description"), t.get("tender_category"),
+             t.get("tender_type"), t.get("tenderer_class"),
+             t.get("product_category"), t.get("sub_category"),
+             t.get("period_of_work"),
              now, new_hash, t["tender_id"]),
         )
     else:
-        conn.execute("UPDATE tenders SET last_seen=? WHERE tender_id=?",
-                     (now, t["tender_id"]))
+        # Nothing the portal controls has changed, so no event -- but we may
+        # have just fetched the detail page and learned fields that were
+        # blank before (description, the Works/Goods split, bidder class).
+        # Only touching last_seen here threw that away, which meant the
+        # nightly top-up could never actually backfill anything.
+        conn.execute(
+            "UPDATE tenders SET last_seen=?, "
+            "work_description=COALESCE(NULLIF(?,''), work_description), "
+            "tender_category=COALESCE(NULLIF(?,''), tender_category), "
+            "tender_type=COALESCE(NULLIF(?,''), tender_type), "
+            "tenderer_class=COALESCE(NULLIF(?,''), tenderer_class), "
+            "product_category=COALESCE(NULLIF(?,''), product_category), "
+            "sub_category=COALESCE(NULLIF(?,''), sub_category), "
+            "period_of_work=COALESCE(NULLIF(?,''), period_of_work), "
+            "location=COALESCE(NULLIF(?,''), location), "
+            "pincode=COALESCE(NULLIF(?,''), pincode) "
+            "WHERE tender_id=?",
+            (now, t.get("work_description"), t.get("tender_category"),
+             t.get("tender_type"), t.get("tenderer_class"),
+             t.get("product_category"), t.get("sub_category"),
+             t.get("period_of_work"), t.get("location"), t.get("pincode"),
+             t["tender_id"]))
 
     conn.commit()
     return events

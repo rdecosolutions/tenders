@@ -258,6 +258,17 @@
     <label>Town / local body</label>
     <input id="f-local" list="local-list" placeholder="all — type to search">
     <datalist id="local-list"></datalist>
+    <label>Contract type <span class="lakh">the portal's own</span></label>
+    <select id="f-cat">
+      <option value="">Any</option>
+      <option value="Works">Works</option>
+      <option value="Goods">Goods</option>
+      <option value="Services">Services</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:10px">
+      <input type="checkbox" id="f-open" style="width:auto;margin:0" checked>
+      <span>Open tenders only <span class="lakh">hide invitation-only</span></span>
+    </label>
     <label>Work type</label><select id="f-work"></select>
     <label>Estimated value</label>
     <select id="f-band">
@@ -442,6 +453,14 @@ function apply(){
     if (local && !(t.local_body||'').toLowerCase()
                    .includes(local.toLowerCase())) return false;
     if (work && !(t.work_list||[]).includes(work)) return false;
+    // The portal's own Works/Goods/Services split. Ours is keyword-derived
+    // and only a guess; this one is authoritative.
+    const cat = $('f-cat').value;
+    if (cat && (t.tender_category || '') !== cat) return false;
+    // "Limited" means invitation-only -- you cannot bid on it, so it is
+    // noise by default. Tenders we have not yet fetched the type for are
+    // kept rather than hidden, so the filter never silently loses anything.
+    if ($('f-open').checked && /limited/i.test(t.tender_type || '')) return false;
     if (q && !searchHit(t, q)) return false;
     const a = amount(t);
     if (amountFiltered && a === null){
@@ -532,6 +551,10 @@ function tenderCard(t){
               + 'tender value.">est.</span></span>'
             : money('')) + '</dd></div>' +
       '<div><dt>Deposit (EMD)</dt><dd>' + money(esc(t.emd)) + '</dd></div>' +
+      (t.tender_category || t.tender_type
+        ? '<div><dt>Contract</dt><dd>' +
+          esc([t.tender_category, t.tender_type].filter(Boolean).join(' \u00b7 ')) +
+          '</dd></div>' : '') +
       '<div><dt>Tender fee</dt><dd>' + money(esc(t.tender_fee)) + '</dd></div>' +
       '<div><dt>District</dt><dd>' + (esc(t.district)||'\u2014') + '</dd></div>' +
       '<div><dt>Town / village body</dt><dd>' + (esc(t.local_body)||'\u2014') + '</dd></div>' +
@@ -588,7 +611,7 @@ function alertCard(e){
 
 const FILTER_LABELS = {
   'f-q': 'Search', 'f-dept': 'Dept', 'f-district': 'District',
-  'f-local': 'Town', 'f-work': 'Work', 'f-band': 'Value',
+  'f-local': 'Town', 'f-work': 'Work', 'f-cat': 'Contract', 'f-band': 'Value',
   'f-min': 'Min', 'f-max': 'Max', 'f-closing': 'Closing within',
   'f-published': 'Published within'
 };
@@ -677,6 +700,9 @@ function renderChips(){
              esc(shown) + suffix +
              '<button data-clear="' + id + '" aria-label="Remove">\u00d7</button></span>';
     });
+  if (!$('f-open').checked)
+    active.push('<span class="fchip">Including invitation-only' +
+      '<button data-clear="f-open" aria-label="Remove">\u00d7</button></span>');
   if ($('f-saved').checked)
     active.push('<span class="fchip">Saved only' +
       '<button data-clear="f-saved" aria-label="Remove">\u00d7</button></span>');
@@ -689,7 +715,8 @@ function renderChips(){
     : '';
   bar.querySelectorAll('[data-clear]').forEach(b => b.onclick = () => {
     const el = $(b.dataset.clear);
-    if (el.type === 'checkbox') el.checked = false; else el.value = '';
+    if (el.type === 'checkbox') el.checked = (el.id === 'f-open');
+    else el.value = '';
     shownCount = PAGE; renderChips(); render();
   });
   const ca = $('clear-all');
@@ -699,7 +726,9 @@ function renderChips(){
 function clearAll(){
   document.querySelectorAll('#side select, #side input, .sortbar select')
   .forEach(el => {
-    if (el.type === 'checkbox') el.checked = false;
+    // f-open defaults to ON: hiding tenders you cannot bid on is the
+    // sensible resting state, so "clear" restores it rather than unticking.
+    if (el.type === 'checkbox') el.checked = (el.id === 'f-open');
     else if (el.id !== 'f-sort') el.value = '';
   });
   shownCount = PAGE; renderChips(); render();
