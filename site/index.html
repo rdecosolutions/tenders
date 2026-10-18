@@ -1127,6 +1127,61 @@ function renderDash(){
     'Combined tender value per body in your selection, including values we derived from the EMD. Volume and spend are not the same thing.',
     rows(spend, v => rupee(v))));
 
+  // --- how fast you have to move, per body
+  // Notice varies enormously: some panchayats close 5 days after
+  // publishing, some corporations give 26. It decides whether an alert has
+  // to reach you within the hour or whether next week is fine, and nobody
+  // publishes it because it only shows up across months of history.
+  const leadBy = {};
+  out.forEach(t => {
+    const pub = parseDate(t.published_date);
+    if (!pub || !t._d || !t.local_body) return;
+    const days = Math.round((t._d - pub) / 864e5);
+    if (days >= 0 && days <= 120) (leadBy[t.local_body] = leadBy[t.local_body] || []).push(days);
+  });
+  const leads = Object.entries(leadBy).filter(([, v]) => v.length >= 8)
+    .map(([b, v]) => [b, Math.round(median(v)), v.length])
+    .sort((a, b) => a[1] - b[1]);
+  const allLead = Object.values(leadBy).flat();
+  P.push(panel('How much notice you get',
+    'Median days from publication to closing, per body. Where it is short you have to hear about a tender the same day; where it is long there is room to prepare.',
+    (allLead.length
+      ? '<div class="big">' + Math.round(median(allLead)) + ' days</div>' +
+        '<p class="why">typical across this selection</p>' : '') +
+    (leads.length
+      ? '<p class="why"><b>Tightest \u2014 move fast here</b></p>' +
+        rows(leads.slice(0, 4).map(r => [r[0], r[1] + ' days (n=' + r[2] + ')'])) +
+        (leads.length > 5
+          ? '<p class="why" style="margin-top:9px"><b>Most room to prepare</b></p>' +
+            rows(leads.slice(-3).reverse().map(r => [r[0], r[1] + ' days (n=' + r[2] + ')']))
+          : '')
+      : '<p class="why">Not enough history per body in this selection yet.</p>')));
+
+  // --- what this filter is excluding
+  // Someone narrowed to their home district has no way of knowing whether
+  // that is where the work is. This says so plainly.
+  const dsel = $('f-district').value;
+  if (dsel){
+    const wanted = new Set((($('f-work').value && [$('f-work').value]) ||
+      [...new Set(out.flatMap(t => t.work_list || []))]).filter(Boolean));
+    const byDist = {};
+    DB.tenders.forEach(t => {
+      if (!t.district || t._closed) return;
+      if (wanted.size && !(t.work_list||[]).some(w => wanted.has(w))) return;
+      byDist[t.district] = (byDist[t.district]||0)+1;
+    });
+    const total = Object.values(byDist).reduce((a,b)=>a+b, 0);
+    const mine = byDist[dsel] || 0;
+    const others = Object.entries(byDist).filter(([d]) => d !== dsel)
+      .sort((a,b) => b[1]-a[1]).slice(0, 5);
+    P.push(panel('What this filter leaves out',
+      'The same kind of work, in districts you are not looking at. Worth knowing whether your patch is where the work actually is.',
+      '<div class="big">' + (total ? Math.round(100*mine/total) : 0) + '%</div>' +
+      '<p class="why">of this work statewide is in ' + esc(dsel) +
+      ' (' + mine + ' of ' + total + ' open)</p>' +
+      rows(others)));
+  }
+
   // --- work that came back
   const again = out.filter(t => t.repeat_of);
   const samePrice = again.filter(t => t.repeat_of.same_price);
