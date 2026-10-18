@@ -162,6 +162,10 @@
     margin-bottom:10px}
   .sortbar label{margin:0;font-size:12.5px;white-space:nowrap}
   .sortbar select{width:auto;min-width:168px;padding:6px 9px;font-size:13px}
+  .linkbtn{border:1px solid var(--line);background:transparent;
+    color:var(--accent);border-radius:7px;padding:6px 11px;font-size:12.5px;
+    font-weight:550;cursor:pointer;font-family:inherit;white-space:nowrap}
+  .linkbtn:hover{background:var(--accent-soft)}
   .chipbar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
   .chipbar:empty{display:none}
   .fchip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
@@ -323,6 +327,9 @@
   <div class="content">
     <div id="dash" class="panels" hidden></div>
     <div class="sortbar">
+      <button id="share-view" class="linkbtn" title="Copy a link that reopens these exact filters">Share this view</button>
+      <button id="export-csv" class="linkbtn" title="Download these tenders as a spreadsheet">Export CSV</button>
+      <span style="flex:1"></span>
       <label for="f-sort">Sort by</label>
       <select id="f-sort">
         <option value="closing">Closing soonest</option>
@@ -688,6 +695,35 @@ function searchHit(t, q){
   return q.split(/\s+/).filter(Boolean).every(w => hay.includes(w));
 }
 
+// Filters live in the URL so a view can be sent to someone else. Without
+// this there is no way to say "here are the Works tenders in Thanjavur over
+// 5 lakh" except by describing the clicks.
+const URL_FIELDS = ['f-q','f-dept','f-district','f-local','f-work','f-cat',
+                    'f-band','f-min','f-max','f-closing','f-published','f-sort'];
+const URL_FLAGS  = ['f-closed','f-saved','f-novalue','f-open'];
+
+function filtersToUrl(){
+  const p = new URLSearchParams();
+  URL_FIELDS.forEach(id => { const v = $(id).value; if (v) p.set(id.slice(2), v); });
+  URL_FLAGS.forEach(id => {
+    const on = $(id).checked, dflt = (id === 'f-open');
+    if (on !== dflt) p.set(id.slice(2), on ? '1' : '0');
+  });
+  const q = p.toString();
+  return location.origin + location.pathname + (q ? '?' + q : '');
+}
+
+function filtersFromUrl(){
+  const p = new URLSearchParams(location.search);
+  if (![...p.keys()].length) return;
+  URL_FIELDS.forEach(id => { const v = p.get(id.slice(2)); if (v !== null) $(id).value = v; });
+  URL_FLAGS.forEach(id => {
+    const v = p.get(id.slice(2));
+    if (v !== null) $(id).checked = (v === '1');
+  });
+  if (p.get('view') === 'dash') setView('dash');
+}
+
 function bandRange(){
   const v = $('f-band').value;
   if (v === 'custom')
@@ -810,6 +846,39 @@ function rows(pairs, fmt){
   return '<table>' + pairs.map(([k, v]) =>
     '<tr><td>' + esc(String(k)) + '</td><td class="n">' +
     (fmt ? fmt(v) : esc(String(v))) + '</td></tr>').join('') + '</table>';
+}
+
+// Agencies work in spreadsheets, and every competitor offers this. Exports
+// exactly what is on screen, filters and all.
+const CSV_COLS = [
+  ['tender_id','Tender ID'], ['title','Title'], ['department','Department'],
+  ['district','District'], ['local_body','Town / local body'],
+  ['work_categories','Work type'], ['tender_category','Contract'],
+  ['tender_type','Tender type'], ['est_amount_raw','Value (published)'],
+  ['est_from_emd','Value (estimated from EMD)'], ['emd','EMD'],
+  ['tender_fee','Tender fee'], ['published_date','Published'],
+  ['closing_date','Closing'], ['tenderer_class','Bidder class'],
+  ['org_chain','Inviting office'], ['eligibility','Who can bid'],
+];
+
+function csvCell(v){
+  const s = String(v === undefined || v === null ? '' : v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportCsv(){
+  const {out} = apply();
+  const lines = [CSV_COLS.map(c => csvCell(c[1])).join(',')];
+  out.forEach(t => lines.push(CSV_COLS.map(c => csvCell(t[c[0]])).join(',')));
+  // BOM so Excel opens the rupee sign and Tamil place names correctly.
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')],
+                        {type: 'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tn-tenders-' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return out.length;
 }
 
 function renderDash(){
@@ -1049,6 +1118,9 @@ async function boot(){
       d.generated_at.slice(0,10) + '. The nightly update may have stopped.';
     $('main').before(div);
   }
+  filtersFromUrl();        // a shared link reopens the same view
+  buildFilterOptions();
+  renderChips();
   render();
 }
 
@@ -1063,12 +1135,31 @@ document.querySelectorAll('#side select, #side input, .sortbar select')
       document.querySelector('.searchrow')
         .classList.toggle('has', !!$('f-q').value);
       shownCount = PAGE; renderChips(); render();
+      // Keep the address bar in step, so copying the URL shares the view.
+      history.replaceState(null, '', filtersToUrl());
     }, 120);
   }));
 // Both clear buttons go through clearAll(), which also resets paging and
 // repaints the filter chips. The old inline version did neither, so chips
 // for filters just cleared stayed on screen.
 $('f-clear').onclick = () => clearAll();
+
+$('export-csv').onclick = () => {
+  const n = exportCsv();
+  const b = $('export-csv'), label = b.textContent;
+  b.textContent = n + ' rows';
+  setTimeout(() => { b.textContent = label; }, 1800);
+};
+
+$('share-view').onclick = () => {
+  const url = filtersToUrl();
+  const b = $('share-view'), label = b.textContent;
+  copyText(url).then(() => {
+    b.textContent = 'Link copied';
+    setTimeout(() => { b.textContent = label; }, 1800);
+  });
+  history.replaceState(null, '', url);
+};
 
 $('q-clear').onclick = () => {
   $('f-q').value = '';
