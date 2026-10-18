@@ -134,6 +134,26 @@
   /* Sorting lives above the results, not inside the collapsed filter
      panel: it is a property of the list you are looking at, and hiding it
      behind "More filters" made it effectively undiscoverable. */
+  /* Insights ------------------------------------------------------- */
+  .panels{display:grid;gap:12px;
+    grid-template-columns:repeat(auto-fit,minmax(272px,1fr))}
+  .panel{background:var(--panel);border:1px solid var(--line);
+    border-radius:11px;padding:15px 17px}
+  .panel h3{margin:0 0 3px;font-size:12px;text-transform:uppercase;
+    letter-spacing:.07em;color:var(--muted)}
+  .panel .why{font-size:11.5px;color:var(--muted);margin:0 0 11px;
+    line-height:1.45}
+  .big{font-size:27px;font-weight:650;letter-spacing:-.02em;margin:2px 0}
+  .panel table{width:100%;border-collapse:collapse;font-size:13px}
+  .panel td{padding:4px 0;vertical-align:top}
+  .panel td.n{text-align:right;color:var(--muted);white-space:nowrap;
+    padding-left:10px}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:46px;margin:8px 0 4px}
+  .bars div{flex:1;background:var(--accent);border-radius:2px 2px 0 0;
+    min-height:2px;opacity:.85}
+  .scale{display:flex;justify-content:space-between;font-size:11px;
+    color:var(--muted)}
+  .panel.wide{grid-column:1/-1}
   .sortbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;
     margin-bottom:10px}
   .sortbar label{margin:0;font-size:12.5px;white-space:nowrap}
@@ -200,6 +220,7 @@
   <div class="tabs">
     <button class="tab on" id="t-tenders">Tenders</button>
     <button class="tab" id="t-alerts">Alerts</button>
+    <button class="tab" id="t-dash">Insights</button>
     <button class="tab bell" id="bell" title="Alerts on this device"
             aria-label="Notification settings">&#128276;</button>
   </div>
@@ -285,6 +306,7 @@
     </div>
   </aside>
   <div class="content">
+    <div id="dash" class="panels" hidden></div>
     <div class="sortbar">
       <label for="f-sort">Sort by</label>
       <select id="f-sort">
@@ -683,8 +705,118 @@ function clearAll(){
   shownCount = PAGE; renderChips(); render();
 }
 
+// ---- Insights ----------------------------------------------------------
+// Everything here is something the portal cannot tell you, because it only
+// ever shows what is live right now. We keep the history, so we can say
+// what work is normally worth, who keeps buying it, and whose deadlines
+// actually hold. Panels respect the current filters, so the answers are
+// about YOUR kind of work, not the whole state.
+function median(xs){
+  if (!xs.length) return null;
+  const a = [...xs].sort((x,y) => x-y);
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m-1]+a[m])/2;
+}
+const rupee = n => '\u20b9' + inr(n);
+
+function panel(title, why, body, wide){
+  return '<section class="panel' + (wide ? ' wide' : '') + '">' +
+    '<h3>' + esc(title) + '</h3>' +
+    (why ? '<p class="why">' + esc(why) + '</p>' : '') + body + '</section>';
+}
+
+function rows(pairs, fmt){
+  if (!pairs.length) return '<p class="why">Not enough data yet.</p>';
+  return '<table>' + pairs.map(([k, v]) =>
+    '<tr><td>' + esc(String(k)) + '</td><td class="n">' +
+    (fmt ? fmt(v) : esc(String(v))) + '</td></tr>').join('') + '</table>';
+}
+
+function renderDash(){
+  const {out} = apply();                 // the current filter selection
+  const scope = out.length;
+  const open = out.filter(t => !t._closed);
+  const d = $('dash');
+  if (!scope){
+    d.innerHTML = '<div class="empty">No tenders match these filters.</div>';
+    return;
+  }
+  const P = [];
+
+  // --- what is in front of you right now
+  const now = new Date();
+  const within = n => open.filter(t => t._d && (t._d - now) <= n*864e5).length;
+  const values = open.map(amount).filter(v => v);
+  const totalValue = values.reduce((a,b) => a+b, 0);
+  P.push(panel('Open to you now',
+    'Matching your current filters. Value includes figures we derived from the EMD.',
+    '<div class="big">' + open.length.toLocaleString() + '</div>' +
+    rows([['Closing today or tomorrow', within(1)],
+          ['Closing within 3 days', within(3)],
+          ['Closing within 7 days', within(7)],
+          ['Combined value', values.length ? rupee(totalValue) : '\u2014']])));
+
+  // --- price benchmark: the question the portal can never answer
+  const byWork = {};
+  out.forEach(t => (t.work_list||[]).forEach(w => {
+    const v = amount(t); if (v) (byWork[w] = byWork[w] || []).push(v);
+  }));
+  const bench = Object.entries(byWork).filter(([,v]) => v.length >= 5)
+    .sort((a,b) => b[1].length - a[1].length).slice(0, 8)
+    .map(([w,v]) => [w + '  (n=' + v.length + ')', median(v)]);
+  P.push(panel('What this work usually costs',
+    'Median published value per work type across everything we have recorded \u2014 the portal deletes closed tenders, so it cannot show you this.',
+    rows(bench, v => rupee(v))));
+
+  // --- who keeps buying
+  const byBody = {};
+  out.forEach(t => { if (t.local_body) byBody[t.local_body] = (byBody[t.local_body]||0)+1; });
+  const buyers = Object.entries(byBody).sort((a,b) => b[1]-a[1]).slice(0, 8);
+  P.push(panel('Who buys this most',
+    'Bodies issuing the most tenders in your current selection. Worth knowing who to build a relationship with.',
+    rows(buyers)));
+
+  // --- deadline reliability: only we know this
+  const ids = new Set(out.map(t => t.tender_id));
+  const extended = new Set(DB.events
+    .filter(e => e.event_type === 'DATE_EXTENSION' && ids.has(e.tender_id))
+    .map(e => e.tender_id));
+  const extByBody = {};
+  extended.forEach(id => {
+    const t = DB.byId[id];
+    if (t && t.local_body) extByBody[t.local_body] = (extByBody[t.local_body]||0)+1;
+  });
+  const worst = Object.entries(extByBody).sort((a,b) => b[1]-a[1]).slice(0, 6);
+  P.push(panel('Do their deadlines hold?',
+    'Tenders whose closing date we watched move. The portal shows only the current date \u2014 it never tells you it changed.',
+    '<div class="big">' + extended.size + '</div>' +
+    '<p class="why">deadline moves recorded in your selection</p>' +
+    rows(worst)));
+
+  // --- publishing rhythm
+  const weeks = {};
+  out.forEach(t => {
+    const p = parseDate(t.published_date);
+    if (!p) return;
+    const k = new Date(p.getFullYear(), p.getMonth(), p.getDate() - p.getDay());
+    weeks[k.toISOString().slice(0,10)] = (weeks[k.toISOString().slice(0,10)]||0)+1;
+  });
+  const wk = Object.entries(weeks).sort().slice(-10);
+  const max = Math.max(...wk.map(w => w[1]), 1);
+  P.push(panel('When they publish',
+    'Tenders published per week. Quiet spells and bursts are real \u2014 budget cycles drive them.',
+    '<div class="bars">' + wk.map(w =>
+      '<div style="height:' + Math.round(w[1]/max*100) + '%" title="' +
+      esc(w[0]) + ': ' + w[1] + '"></div>').join('') + '</div>' +
+    '<div class="scale"><span>' + (wk[0]||[''])[0] + '</span><span>' +
+    (wk[wk.length-1]||[''])[0] + '</span></div>', true));
+
+  d.innerHTML = P.join('');
+}
+
 function render(){
   const main = $('main');
+  if (view === 'dash'){ renderDash(); return; }
   if (view === 'alerts'){
     const ev = DB.events.slice(0, shownCount);
     main.innerHTML = ev.length
@@ -819,8 +951,14 @@ function setView(v){
   shownCount = PAGE;
   $('t-tenders').classList.toggle('on', v === 'tenders');
   $('t-alerts').classList.toggle('on', v === 'alerts');
+  $('t-dash').classList.toggle('on', v === 'dash');
+  // Insights keeps the filters -- the whole point is that the numbers
+  // describe your kind of work, not the whole state.
   $('side').hidden = (v === 'alerts');
   $('chips').hidden = (v === 'alerts');
+  $('dash').hidden = (v !== 'dash');
+  $('main').hidden = (v === 'dash');
+  document.querySelector('.sortbar').hidden = (v !== 'tenders');
   $('alert-note').style.display = v === 'alerts' ? 'block' : 'none';
   render();
 }
@@ -929,6 +1067,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') sheet.hidden = true;
 });
 
+$('t-dash').onclick = () => setView('dash');
 $('t-tenders').onclick = () => setView('tenders');
 $('t-alerts').onclick = () => setView('alerts');
 if (window.matchMedia('(max-width:820px)').matches) $('filters').open = false;
