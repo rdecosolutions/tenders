@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -68,6 +69,62 @@ def _rows(conn, table: str, order: str) -> list[dict]:
         f"SELECT * FROM {table} ORDER BY {order}")]
 
 
+# ---------------------------------------------------------------------------
+# Work that has been tendered before.
+#
+# A body re-publishing the same work weeks later usually means the first
+# attempt failed -- too few bidders, or no qualifying one. That is a signal
+# worth having: it says competition was thin, and when the price comes back
+# unchanged it says the body has not reconsidered it. No competitor can
+# offer this, because the portal deletes closed tenders and only someone
+# who has been recording for months can see the repeat.
+#
+# Only titles with real descriptive wording are compared. Many titles are
+# bare reference numbers like "R.D.C.No.B1/234/2026", and matching those
+# groups unrelated tenders together.
+MIN_TITLE_WORDS = 6
+MIN_REPEAT_DAYS = 21
+
+
+def _title_key(title: str) -> str | None:
+    words = [w.lower() for w in re.findall(r"[a-zA-Z]{4,}", title or "")]
+    return " ".join(words) if len(words) >= MIN_TITLE_WORDS else None
+
+
+def _mark_repeats(rows: list[dict]) -> int:
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for t in rows:
+        key = _title_key(t.get("title", ""))
+        if key and t.get("local_body"):
+            groups.setdefault((t["local_body"], key), []).append(t)
+
+    marked = 0
+    for members in groups.values():
+        dated = [(d, t) for t in members
+                 if (d := _parse_closing(t.get("published_date", "")))]
+        if len(dated) < 2:
+            continue
+        dated.sort(key=lambda pair: pair[0])
+        for i, (when, t) in enumerate(dated):
+            if i == 0:
+                continue
+            prev_when, prev = dated[i - 1]
+            gap = (when - prev_when).days
+            if gap < MIN_REPEAT_DAYS:
+                continue
+            t["repeat_of"] = {
+                "tender_id": prev["tender_id"],
+                "published": prev.get("published_date", ""),
+                "amount": prev.get("est_amount_raw", ""),
+                "days": gap,
+                "same_price": bool(
+                    prev.get("est_amount_raw")
+                    and prev.get("est_amount_raw") == t.get("est_amount_raw")),
+            }
+            marked += 1
+    return marked
+
+
 def dump(conn) -> dict:
     """Write the database out as sorted NDJSON, plus the site's data file."""
     tenders = _rows(conn, "tenders", "tender_id")
@@ -99,6 +156,7 @@ def dump(conn) -> dict:
     slim = [{k: v for k, v in t.items() if k not in SITE_SKIP} for t in tenders]
     for t in slim:
         _add_estimated_value(t)
+    repeats = _mark_repeats(slim)
     horizon = datetime.now() - timedelta(days=ARCHIVE_AFTER_DAYS)
     live, archive = [], []
     for t in slim:
@@ -122,7 +180,7 @@ def dump(conn) -> dict:
 
     return {"tenders": len(tenders), "events": len(events),
             "site_events": len(recent), "live": len(live),
-            "archived": len(archive)}
+            "archived": len(archive), "repeats": repeats}
 
 
 # The portal leaves the tender value blank on about a quarter of tenders,

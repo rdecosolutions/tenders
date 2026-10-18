@@ -78,6 +78,10 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:11px;
     padding:16px 18px;margin-bottom:11px;position:relative}
   .card h3{padding-right:34px}
+  .doc{display:inline-flex;align-items:baseline;gap:6px;font-size:12px;
+    background:var(--bg);border:1px solid var(--line);border-radius:5px;
+    padding:3px 8px;margin:0 6px 5px 0}
+  .docsz{color:var(--muted);font-size:11px}
   .na{color:var(--muted);font-style:italic;font-size:12.5px}
   .est{color:var(--ink)}
   .esttag{font-size:10px;font-weight:700;text-transform:uppercase;
@@ -108,6 +112,9 @@
   .badge.extended{background:var(--extended)}
   .badge.retendered{background:var(--retendered)}
   .badge.cancelled{background:var(--cancelled)}
+  .again{margin:0 0 8px;font-size:12.5px;font-weight:600;
+    color:var(--retendered);cursor:help}
+  .again b{font-weight:700}
   .pos{margin:0 0 8px;font-size:12.5px;font-weight:600}
   .pos.hi{color:var(--cancelled)} .pos.lo{color:var(--new)}
   .pos.mid{color:var(--muted)}
@@ -310,6 +317,10 @@
       <option value="3">3 days</option>
       <option value="7">7 days</option>
     </select>
+    <label style="display:flex;align-items:center;gap:7px;margin-top:10px">
+      <input type="checkbox" id="f-repeat" style="width:auto;margin:0">
+      <span>Tendered before <span class="lakh">first attempt failed</span></span>
+    </label>
     <label style="display:flex;align-items:center;gap:7px;margin-top:14px">
       <input type="checkbox" id="f-saved" style="width:auto;margin:0">
       <span>Saved only <span id="saved-n" class="lakh"></span></span>
@@ -489,6 +500,7 @@ function apply(){
     // the "New" flag: a tender published months ago only enters our view when
     // its deadline nears, so it looks new to us while being old in fact.
     if (pubSince && (!t._p || t._p < pubSince)) return false;
+    if ($('f-repeat').checked && !t.repeat_of) return false;
     if ($('f-saved').checked && !saved.has(t.tender_id)) return false;
     if (t._closed){ closedHidden++; if(!$('f-closed').checked) return false; }
     return true;
@@ -550,6 +562,16 @@ function tenderCard(t){
       (t.status && t.status!=='active'
         ? '<span class="chip grey">' + esc(t.status) + '</span>' : '') +
     '</div>' +
+    (t.repeat_of
+      ? '<p class="again" title="Same body, same wording, published again ' +
+        'after a gap. A body usually re-runs a tender because the first ' +
+        'attempt drew no qualifying bidder.">\u21bb Tendered before \u00b7 ' +
+        esc((t.repeat_of.published||'').slice(0,11)) +
+        (t.repeat_of.amount ? ' at \u20b9' + esc(t.repeat_of.amount) : '') +
+        ' \u00b7 back after ' + t.repeat_of.days + ' days' +
+        (t.repeat_of.same_price
+          ? ' <b>at the same price</b>' : '') + '</p>'
+      : '') +
     (() => { const pp = pricePosition(t); return pp
         ? '<p class="pos ' + (pp.pct >= 15 ? 'hi' : pp.pct <= -15 ? 'lo' : 'mid') +
           '" title="Compared with the median of everything we have recorded for ' +
@@ -588,6 +610,14 @@ function tenderCard(t){
         t.work_description.trim().toLowerCase() !== (t.title||'').trim().toLowerCase()
         ? '<div style="grid-column:1/-1"><dt>Description</dt><dd>' +
           esc(t.work_description) + '</dd></div>' : '') +
+      (t.documents
+        ? '<div style="grid-column:1/-1"><dt>Documents to download</dt><dd>' +
+          t.documents.split(';').filter(Boolean).map(d => {
+            const [name, kb] = d.split('|');
+            const size = +kb >= 1024 ? (kb/1024).toFixed(1) + ' MB' : kb + ' KB';
+            return '<span class="doc">' + esc(name) +
+                   '<span class="docsz">' + size + '</span></span>';
+          }).join('') + '</dd></div>' : '') +
       (t.eligibility ? '<div style="grid-column:1/-1"><dt>Who can bid</dt><dd>' +
         esc(t.eligibility) + '</dd></div>' : '') +
     '</dl>' +
@@ -700,7 +730,7 @@ function searchHit(t, q){
 // 5 lakh" except by describing the clicks.
 const URL_FIELDS = ['f-q','f-dept','f-district','f-local','f-work','f-cat',
                     'f-band','f-min','f-max','f-closing','f-published','f-sort'];
-const URL_FLAGS  = ['f-closed','f-saved','f-novalue','f-open'];
+const URL_FLAGS  = ['f-closed','f-saved','f-novalue','f-open','f-repeat'];
 
 function filtersToUrl(){
   const p = new URLSearchParams();
@@ -750,6 +780,9 @@ function renderChips(){
   if (!$('f-open').checked)
     active.push('<span class="fchip">Including invitation-only' +
       '<button data-clear="f-open" aria-label="Remove">\u00d7</button></span>');
+  if ($('f-repeat').checked)
+    active.push('<span class="fchip">Tendered before' +
+      '<button data-clear="f-repeat" aria-label="Remove">\u00d7</button></span>');
   if ($('f-saved').checked)
     active.push('<span class="fchip">Saved only' +
       '<button data-clear="f-saved" aria-label="Remove">\u00d7</button></span>');
@@ -990,6 +1023,17 @@ function renderDash(){
   P.push(panel('Where the money is',
     'Combined tender value per body in your selection, including values we derived from the EMD. Volume and spend are not the same thing.',
     rows(spend, v => rupee(v))));
+
+  // --- work that came back
+  const again = out.filter(t => t.repeat_of);
+  const samePrice = again.filter(t => t.repeat_of.same_price);
+  const againBy = {};
+  again.forEach(t => { if (t.local_body) againBy[t.local_body] = (againBy[t.local_body]||0)+1; });
+  P.push(panel('Work that came back',
+    'Same body, same wording, published again after a gap \u2014 usually because the first attempt drew no qualifying bidder. Thin competition is worth knowing about.',
+    '<div class="big">' + again.length + '</div>' +
+    '<p class="why">' + samePrice.length + ' of them re-published at the identical price, meaning the body has not reconsidered the figure</p>' +
+    rows(Object.entries(againBy).sort((a,b) => b[1]-a[1]).slice(0, 6))));
 
   // --- publishing rhythm
   const weeks = {};

@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS tenders (
     product_category TEXT,
     sub_category    TEXT,
     period_of_work  TEXT,
+    documents       TEXT,          -- "name|KB;name|KB" from the detail page
     work_description TEXT,         -- detail-page description; the classifier
                                    -- needs it, and without storing it a later
                                    -- re-tag can only see the title
@@ -112,7 +113,7 @@ def _migrate(conn) -> None:
     for col in ("org_chain", "circle", "location", "pincode", "opening_date",
                 "work_description", "tender_category", "tender_type",
                 "tenderer_class", "product_category", "sub_category",
-                "period_of_work"):
+                "period_of_work", "documents"):
         if col not in have:
             conn.execute(f"ALTER TABLE tenders ADD COLUMN {col} TEXT")
     conn.commit()
@@ -275,6 +276,7 @@ def upsert(conn, t: dict) -> list[str]:
             "product_category=COALESCE(NULLIF(?,''), product_category), "
             "sub_category=COALESCE(NULLIF(?,''), sub_category), "
             "period_of_work=COALESCE(NULLIF(?,''), period_of_work), "
+            "documents=COALESCE(NULLIF(?,''), documents), "
             "last_seen=?, last_hash=? WHERE tender_id=?",
             (t.get("title"), t.get("est_amount"), t.get("est_amount_raw"),
              t.get("closing_date"), t.get("opening_date"), t.get("emd"),
@@ -284,7 +286,7 @@ def upsert(conn, t: dict) -> list[str]:
              t.get("work_description"), t.get("tender_category"),
              t.get("tender_type"), t.get("tenderer_class"),
              t.get("product_category"), t.get("sub_category"),
-             t.get("period_of_work"),
+             t.get("period_of_work"), t.get("documents"),
              now, new_hash, t["tender_id"]),
         )
     else:
@@ -302,13 +304,15 @@ def upsert(conn, t: dict) -> list[str]:
             "product_category=COALESCE(NULLIF(?,''), product_category), "
             "sub_category=COALESCE(NULLIF(?,''), sub_category), "
             "period_of_work=COALESCE(NULLIF(?,''), period_of_work), "
+            "documents=COALESCE(NULLIF(?,''), documents), "
             "location=COALESCE(NULLIF(?,''), location), "
             "pincode=COALESCE(NULLIF(?,''), pincode) "
             "WHERE tender_id=?",
             (now, t.get("work_description"), t.get("tender_category"),
              t.get("tender_type"), t.get("tenderer_class"),
              t.get("product_category"), t.get("sub_category"),
-             t.get("period_of_work"), t.get("location"), t.get("pincode"),
+             t.get("period_of_work"), t.get("documents"),
+             t.get("location"), t.get("pincode"),
              t["tender_id"]))
 
     conn.commit()

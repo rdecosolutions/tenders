@@ -487,6 +487,35 @@ DETAIL_FIELDS = {
 }
 
 
+DOC_RE = re.compile(
+    r"(\S+\.(?:pdf|xls|xlsx|zip|doc|docx|rar))\s+(?:.{0,60}?)\s*([\d,]+\.\d+)",
+    re.I)
+
+
+def _parse_documents(body_text: str) -> str:
+    """
+    Names, types and sizes of the documents attached to a tender.
+
+    The files themselves are fetchable, but they are session-bound links and
+    come to about 3.5 GB across the open tenders, which needs real hosting.
+    The LIST is small and answers most of the question on its own: is there
+    a BOQ, is the notice 2 pages or 80, is anything in a format I cannot
+    open. Stored as "name|KB" pairs separated by semicolons.
+    """
+    seen, out = set(), []
+    for m in DOC_RE.finditer(body_text):
+        name = m.group(1)
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        try:
+            kb = float(m.group(2).replace(",", ""))
+        except ValueError:
+            continue
+        out.append(f"{name}|{kb:.0f}")
+    return ";".join(out[:12])
+
+
 def _parse_detail(page) -> dict:
     """
     Read the label/value grid on a tender detail page.
@@ -512,6 +541,7 @@ def _parse_detail(page) -> dict:
 
     # Corrigendum table on the detail page, if any.
     body = _clean(page.inner_text("body"))
+    out["documents"] = _parse_documents(body)
     out["_has_corrigendum"] = "Corrigendum Title" in body and bool(
         re.search(r"Corrigendum Title.*?\d+\s", body)
     )
@@ -543,7 +573,8 @@ def _apply_detail(row: dict, detail: dict) -> None:
     row["location"] = detail.get("location", "")
     row["work_description"] = detail.get("work_description", "")
     for field in ("tender_category", "tender_type", "tenderer_class",
-                  "product_category", "sub_category", "period_of_work"):
+                  "product_category", "sub_category", "period_of_work",
+                  "documents"):
         row[field] = detail.get(field, "")
     row["pincode"] = detail.get("pincode", "")
 
