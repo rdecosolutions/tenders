@@ -39,5 +39,15 @@ if p.stack:
 # body > header, div.sheet, div.wrap  => wrap must sit at depth 2 (html>body)
 if p.wrap_depth is not None and p.wrap_depth != 2:
     ok=False; print(f"  .wrap is nested too deep (depth {p.wrap_depth}, expected 2)")
+# A second silent-deploy class: any author rule that sets `display` outranks
+# the user-agent [hidden]{display:none}, so .panels{display:grid} left the
+# Insights pane on screen while the Tenders tab was lit -- the right tab,
+# the wrong screen. One global rule fixes every such element, so assert it
+# is still there rather than re-discovering this per element.
+if not re.search(r"\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important", src):
+    ok = False
+    print("  MISSING: [hidden]{display:none !important} -- elements with a "
+          "display rule (grid/flex) will not hide")
+
 print("  OK" if ok else "  FAILED")
 sys.exit(0 if ok else 1)

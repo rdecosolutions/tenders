@@ -172,6 +172,14 @@
   /* Sorting lives above the results, not inside the collapsed filter
      panel: it is a property of the list you are looking at, and hiding it
      behind "More filters" made it effectively undiscoverable. */
+  /* Any author rule that sets `display` beats the browser's built-in
+     [hidden]{display:none}, because a class selector outranks the user-agent
+     stylesheet. .panels{display:grid} therefore made the Insights pane
+     impossible to hide: switching back to Tenders lit the right tab but
+     left the Insights panels on screen above the list. Declare it once,
+     with !important, so hidden means hidden for every element. */
+  [hidden]{display:none !important}
+
   /* Insights ------------------------------------------------------- */
   .panels{display:grid;gap:12px;
     grid-template-columns:repeat(auto-fit,minmax(272px,1fr))}
