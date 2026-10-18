@@ -84,6 +84,18 @@
   .docsz{color:var(--muted);font-size:11px}
   .lock{display:block;font-size:11px;color:var(--muted);margin-top:2px;
     cursor:help}
+  .chart{width:100%;height:auto;margin:6px 0 2px;display:block}
+  .hbars{display:flex;flex-direction:column;gap:5px;margin-top:4px}
+  .hbar{display:grid;grid-template-columns:1fr 84px auto;align-items:center;
+    gap:8px;font-size:12.5px}
+  .hbar[data-filter]{cursor:pointer;border-radius:5px}
+  .hbar[data-filter]:hover .hfill,.hbar[data-filter]:focus .hfill{opacity:1}
+  .hbar[data-filter]:hover .hlabel{color:var(--accent)}
+  .hlabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .htrack{background:var(--bg);border-radius:3px;height:9px;overflow:hidden}
+  .hfill{display:block;height:100%;background:var(--accent);opacity:.75;
+    border-radius:3px}
+  .hval{color:var(--muted);font-size:11.5px;white-space:nowrap}
   .bets{margin:0;padding-left:20px}
   .bets li{margin-bottom:11px}
   .bets a{color:var(--ink);font-weight:600;font-size:13.5px;
@@ -888,6 +900,82 @@ function median(xs){
 }
 const rupee = n => '\u20b9' + inr(n);
 
+// ---- Charts -------------------------------------------------------------
+// Inline SVG, no library: the page is one file with no dependencies and
+// that is worth keeping. Colours come from the CSS variables so dark mode
+// works without a second palette.
+function hBars(pairs, fmt, onClickAttr){
+  if (!pairs.length) return '<p class="why">Not enough data yet.</p>';
+  const max = Math.max(...pairs.map(p => p[1])) || 1;
+  return '<div class="hbars">' + pairs.map(([k, v]) =>
+    '<div class="hbar"' + (onClickAttr ? ' data-filter="' + esc(onClickAttr) +
+      '" data-value="' + esc(String(k)) + '" tabindex="0" role="button"' : '') + '>' +
+      '<span class="hlabel" title="' + esc(String(k)) + '">' + esc(String(k)) + '</span>' +
+      '<span class="htrack"><span class="hfill" style="width:' +
+        Math.max(2, Math.round(v/max*100)) + '%"></span></span>' +
+      '<span class="hval">' + (fmt ? fmt(v) : v.toLocaleString()) + '</span>' +
+    '</div>').join('') + '</div>';
+}
+
+// Deadline load: how many of your tenders close on each of the next 14
+// days. Clusters are real -- bodies favour the same closing dates -- and a
+// day with nine deadlines is a day you cannot prepare nine bids.
+function deadlineChart(open){
+  const now = new Date(); now.setHours(0,0,0,0);
+  const days = [];
+  for (let i = 0; i < 14; i++){
+    const d = new Date(now.getTime() + i*864e5);
+    days.push({d, n: 0});
+  }
+  open.forEach(t => {
+    if (!t._d) return;
+    const i = Math.floor((t._d - now) / 864e5);
+    if (i >= 0 && i < 14) days[i].n++;
+  });
+  const max = Math.max(...days.map(x => x.n), 1);
+  const W = 320, H = 92, bw = W / 14;
+  const bars = days.map((x, i) => {
+    const h = Math.round(x.n / max * (H - 22));
+    const peak = x.n >= max * 0.8 && x.n > 0;
+    return '<g><title>' + x.d.toDateString() + ': ' + x.n + ' closing</title>' +
+      '<rect x="' + (i*bw + 2) + '" y="' + (H - 18 - h) + '" width="' + (bw - 4) +
+      '" height="' + Math.max(h, x.n ? 2 : 0) + '" rx="2" fill="' +
+      (peak ? 'var(--cancelled)' : 'var(--accent)') + '" opacity="' +
+      (x.n ? '.9' : '.15') + '"></rect>' +
+      '<text x="' + (i*bw + bw/2) + '" y="' + (H - 5) +
+      '" text-anchor="middle" font-size="8.5" fill="var(--muted)">' +
+      x.d.getDate() + '</text></g>';
+  }).join('');
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart" ' +
+    'role="img" aria-label="Tenders closing each day over the next fortnight">' +
+    bars + '</svg>';
+}
+
+// Where tender values cluster, so "is this a normal size job here" has a
+// shape rather than just a median.
+function valueChart(values){
+  if (values.length < 8) return '';
+  const buckets = [
+    ['<1L', 0, 100000], ['1-5L', 100000, 500000], ['5-10L', 500000, 1000000],
+    ['10-25L', 1000000, 2500000], ['25L-1Cr', 2500000, 10000000],
+    ['>1Cr', 10000000, Infinity]];
+  const counts = buckets.map(([, lo, hi]) =>
+    values.filter(v => v >= lo && v < hi).length);
+  const max = Math.max(...counts, 1);
+  const W = 320, H = 92, bw = W / buckets.length;
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" class="chart" role="img" ' +
+    'aria-label="How tender values are distributed">' +
+    buckets.map((b, i) => {
+      const h = Math.round(counts[i] / max * (H - 24));
+      return '<g><title>' + b[0] + ': ' + counts[i] + ' tenders</title>' +
+        '<rect x="' + (i*bw + 3) + '" y="' + (H - 20 - h) + '" width="' + (bw - 6) +
+        '" height="' + Math.max(h, counts[i] ? 2 : 0) + '" rx="2" ' +
+        'fill="var(--accent)" opacity=".85"></rect>' +
+        '<text x="' + (i*bw + bw/2) + '" y="' + (H - 6) + '" text-anchor="middle" ' +
+        'font-size="8.5" fill="var(--muted)">' + b[0] + '</text></g>';
+    }).join('') + '</svg>';
+}
+
 function panel(title, why, body, wide){
   return '<section class="panel' + (wide ? ' wide' : '') + '">' +
     '<h3>' + esc(title) + '</h3>' +
@@ -1077,6 +1165,9 @@ function renderDash(){
   P.push(panel('Open to you now',
     'Matching your current filters. Value includes figures we derived from the EMD.',
     '<div class="big">' + open.length.toLocaleString() + '</div>' +
+    deadlineChart(open) +
+    '<p class="why">closing each day over the next fortnight \u2014 red marks ' +
+    'the crunch days</p>' +
     rows([['Closing today or tomorrow', within(1)],
           ['Closing within 3 days', within(3)],
           ['Closing within 7 days', within(7)],
@@ -1092,6 +1183,8 @@ function renderDash(){
     .map(([w,v]) => [w + '  (n=' + v.length + ')', median(v)]);
   P.push(panel('What this work usually costs',
     'Median published value per work type across everything we have recorded \u2014 the portal deletes closed tenders, so it cannot show you this.',
+    valueChart(out.map(amount).filter(v => v)) +
+    '<p class="why">how the values in this selection are spread</p>' +
     rows(bench, v => rupee(v))));
 
   // --- who keeps buying
@@ -1099,8 +1192,8 @@ function renderDash(){
   out.forEach(t => { if (t.local_body) byBody[t.local_body] = (byBody[t.local_body]||0)+1; });
   const buyers = Object.entries(byBody).sort((a,b) => b[1]-a[1]).slice(0, 8);
   P.push(panel('Who buys this most',
-    'Bodies issuing the most tenders in your current selection. Worth knowing who to build a relationship with.',
-    rows(buyers)));
+    'Bodies issuing the most tenders in your current selection. Click one to filter to it.',
+    hBars(buyers, null, 'f-local')));
 
   // --- deadline reliability: only we know this
   const ids = new Set(out.map(t => t.tender_id));
@@ -1206,8 +1299,8 @@ function renderDash(){
   });
   const spend = Object.entries(spendBy).sort((a,b) => b[1]-a[1]).slice(0, 7);
   P.push(panel('Where the money is',
-    'Combined tender value per body in your selection, including values we derived from the EMD. Volume and spend are not the same thing.',
-    rows(spend, v => rupee(v))));
+    'Combined tender value per body, including values derived from the EMD. Volume and spend are different questions. Click to filter.',
+    hBars(spend, v => rupee(v), 'f-local')));
 
   // --- how fast you have to move, per body
   // Notice varies enormously: some panchayats close 5 days after
@@ -1294,6 +1387,21 @@ function renderDash(){
     (wk[wk.length-1]||[''])[0] + '</span></div>', true));
 
   d.innerHTML = P.join('');
+
+  // Clicking a bar applies it as a filter and drops you into the list --
+  // the chart becomes a way to navigate rather than just something to look at.
+  d.querySelectorAll('[data-filter]').forEach(el => {
+    const apply = () => {
+      const target = $(el.dataset.filter);
+      if (!target) return;
+      target.value = el.dataset.value;
+      target.dispatchEvent(new Event('input', {bubbles: true}));
+      setView('tenders');
+    };
+    el.onclick = apply;
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apply(); } };
+  });
+
   const be = $('emd-budget');
   if (be) be.oninput = () => {
     try { localStorage.setItem('tn-emd-budget', be.value); } catch (_) {}
