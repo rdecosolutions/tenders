@@ -345,6 +345,7 @@
     <div class="sortbar">
       <button id="share-view" class="linkbtn" title="Copy a link that reopens these exact filters">Share this view</button>
       <button id="export-csv" class="linkbtn" title="Download these tenders as a spreadsheet">Export CSV</button>
+      <button id="export-ics" class="linkbtn" title="Put these closing dates in your calendar, with a reminder the day before">Add to calendar</button>
       <span style="flex:1"></span>
       <label for="f-sort">Sort by</label>
       <select id="f-sort">
@@ -924,6 +925,57 @@ function exportCsv(){
   return out.length;
 }
 
+// Deadlines belong in the calendar a person already looks at, not in a tab
+// they have to remember to open. Each tender becomes an event at its
+// closing time with an alarm the day before, which is when there is still
+// time to do something about it.
+function icsEscape(t){
+  return String(t || '').replace(/\\/g, '\\\\')
+    .replace(/[;,]/g, m => '\\' + m).replace(/\r?\n/g, '\\n');
+}
+function icsStamp(d){
+  return d.getUTCFullYear() +
+    String(d.getUTCMonth()+1).padStart(2,'0') +
+    String(d.getUTCDate()).padStart(2,'0') + 'T' +
+    String(d.getUTCHours()).padStart(2,'0') +
+    String(d.getUTCMinutes()).padStart(2,'0') + '00Z';
+}
+function exportIcs(){
+  const {out} = apply();
+  const dated = out.filter(t => t._d && !t._closed);
+  const now = new Date();
+  const L = ['BEGIN:VCALENDAR','VERSION:2.0',
+             'PRODID:-//TN Tenders//EN','CALSCALE:GREGORIAN'];
+  dated.forEach(t => {
+    const v = t.est_amount_raw ? '\u20b9' + t.est_amount_raw
+            : t.est_from_emd ? '~\u20b9' + inr(t.est_from_emd) + ' (est)'
+            : 'value not published';
+    const desc = [v, 'EMD: ' + (t.emd ? '\u20b9' + t.emd : 'not stated'),
+                  t.local_body, t.district, 'Tender ID: ' + t.tender_id,
+                  location.origin + location.pathname + '?q=' + t.tender_id
+                 ].filter(Boolean).join('\n');
+    L.push('BEGIN:VEVENT',
+      'UID:' + t.tender_id + '@tn-tenders',
+      'DTSTAMP:' + icsStamp(now),
+      'DTSTART:' + icsStamp(t._d),
+      'DTEND:' + icsStamp(new Date(t._d.getTime() + 30*60000)),
+      'SUMMARY:' + icsEscape('Closes: ' + (t.title || t.tender_id).slice(0, 70)),
+      'DESCRIPTION:' + icsEscape(desc),
+      'LOCATION:' + icsEscape([t.local_body, t.district].filter(Boolean).join(', ')),
+      'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY',
+      'DESCRIPTION:Tender closes tomorrow','END:VALARM',
+      'END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  const blob = new Blob([L.join('\r\n')], {type:'text/calendar;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tn-tender-deadlines.ics';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return dated.length;
+}
+
 function renderDash(){
   const {out} = apply();                 // the current filter selection
   const scope = out.length;
@@ -1254,6 +1306,13 @@ $('export-csv').onclick = () => {
   const n = exportCsv();
   const b = $('export-csv'), label = b.textContent;
   b.textContent = n + ' rows';
+  setTimeout(() => { b.textContent = label; }, 1800);
+};
+
+$('export-ics').onclick = () => {
+  const n = exportIcs();
+  const b = $('export-ics'), label = b.textContent;
+  b.textContent = n + ' deadlines';
   setTimeout(() => { b.textContent = label; }, 1800);
 };
 
