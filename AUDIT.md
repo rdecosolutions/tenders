@@ -31,10 +31,17 @@ only populate when a tender's detail page is re-fetched:
 | `documents` | **0%** | Document list on the card |
 | `bid_validity` | **0%** | "EMD locked ~90d" and the commitment curve |
 
-The nightly top-up fetches 200 detail pages per run. Against 11,341
-tenders that is **roughly 57 nights** to backfill. So the contract-type
-filter currently operates on 1% of the data and will look broken to a user
-until around mid-December.
+**Correction (same day):** the original figure here was 57 nights, which
+was wrong and wrong in my favour. It divided 11,341 tenders by 200 a night.
+But the sweep only walks the 14-day closing listing, so the top-up can only
+ever reach tenders that are still open — 2,751 of them, of which 2,634 lack
+the field. The real figure was **13 nights**. Raising the top-up to 500 a
+run brings it to about **five**, and the nightly request load to roughly
+1,000 over ninety minutes, around 11 a minute, which stays inside polite.
+
+Until coverage is adequate the contract-type filter disables itself and
+says "filling in — 4% of open tenders so far", rather than appearing broken
+by silently returning nothing.
 
 **This is the single most important thing to fix before showing anyone.**
 Options: raise the top-up limit (portal politeness is the constraint),

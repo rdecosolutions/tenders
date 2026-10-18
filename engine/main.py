@@ -54,11 +54,13 @@ DETAIL_ONLY_FIELDS = ("est_amount_raw", "emd", "tender_fee", "eligibility",
 # re-fetch thousands of detail pages at once -- which would be exactly the
 # hammering the portal rules warn about -- each run tops up a small batch.
 # At this rate a couple of thousand fill in over a few weeks, unnoticed.
-# Raised from 60: at that rate backfilling thousands of rows would take
-# months. The listing only ever shows tenders closing within 14 days, so a
-# top-up here only ever touches tenders that are still live and therefore
-# still worth knowing about.
-BACKFILL_DETAIL_PER_RUN = 200
+# The listing only ever shows tenders closing within 14 days, so a top-up
+# only touches tenders that are still live -- about 2,600 of them lack the
+# detail-page fields. At 200 a run that is 13 nights, which is too long for
+# a filter to sit visibly empty, so 500. The nightly sweep already makes
+# roughly 500 listing requests; this takes the total to about 1,000 over an
+# hour and a half, around 11 a minute, which stays well inside polite.
+BACKFILL_DETAIL_PER_RUN = 500
 
 
 def _load_known(conn) -> dict[str, dict]:
