@@ -1688,6 +1688,12 @@ function setView(v){
   document.querySelector('.sortbar').hidden = (v !== 'tenders');
   $('alert-note').style.display = v === 'alerts' ? 'block' : 'none';
   render();
+  // Go back to the top. The three tabs are wildly different heights --
+  // Insights ~7,000px, Tenders ~87,000px -- so carrying the scroll
+  // position across a switch drops you into the middle of the list with
+  // no heading, no filters and no clue where you are. It reads as the
+  // wrong screen, because effectively it is.
+  window.scrollTo(0, 0);
 }
 const PORTAL_SEARCH =
   'https://tntenders.gov.in/nicgep/app?page=FrontEndLatestActiveTenders&service=page';
