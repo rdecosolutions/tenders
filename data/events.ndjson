@@ -12860,3 +12860,9 @@
 {"created_at": "2026-10-19T00:08:42.832342+00:00", "detail": "closing date: 20-Oct-2026 03:00 PM -> 21-Oct-2026 03:00 PM; status: active -> corrigendum", "event_type": "CORRIGENDUM", "id": 13028, "tender_id": "2026_RDTN_708806_1"}
 {"created_at": "2026-10-19T00:10:19.960178+00:00", "detail": "20-Oct-2026 03:00 PM -> 21-Oct-2026 03:00 PM", "event_type": "DATE_EXTENSION", "id": 13029, "tender_id": "2026_RDTN_708786_1"}
 {"created_at": "2026-10-19T00:10:19.960208+00:00", "detail": "closing date: 20-Oct-2026 03:00 PM -> 21-Oct-2026 03:00 PM; status: active -> corrigendum", "event_type": "CORRIGENDUM", "id": 13030, "tender_id": "2026_RDTN_708786_1"}
+{"created_at": "2026-10-19T08:19:04.349320+00:00", "detail": "Providing For CC road RP road to Kumanthangal (370m to 690m) at H/O Kondakuppam Panchayat", "event_type": "NEW", "id": 13031, "tender_id": "2026_RDTN_715896_1"}
+{"created_at": "2026-10-19T08:19:08.762065+00:00", "detail": "Construction of Drainage at rajiv gandhi nagar 3rd street H/O V.C.Mottur Panchayat", "event_type": "NEW", "id": 13032, "tender_id": "2026_RDTN_715897_1"}
+{"created_at": "2026-10-19T08:19:13.228730+00:00", "detail": "Construction of drainage at Anna nagar H/O Thagarakuppam Panchayat", "event_type": "NEW", "id": 13033, "tender_id": "2026_RDTN_714927_1"}
+{"created_at": "2026-10-19T08:19:17.611715+00:00", "detail": "Provision for CC Pavement at Dayalan Nagar Manthoppu street H/O Nowlock Panchayat", "event_type": "NEW", "id": 13034, "tender_id": "2026_RDTN_715249_1"}
+{"created_at": "2026-10-19T08:19:22.000969+00:00", "detail": "Construction of Drainage at Chettithangal MGR Street ( Prakash House to Ramachandran House) H/O Chettithangal Panchayat", "event_type": "NEW", "id": 13035, "tender_id": "2026_RDTN_714939_1"}
+{"created_at": "2026-10-19T08:19:26.422340+00:00", "detail": "Construction of Drainage at Anna Nagar H/O Nowlock Panchayat", "event_type": "NEW", "id": 13036, "tender_id": "2026_RDTN_715242_1"}
