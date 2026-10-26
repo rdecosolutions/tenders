@@ -477,6 +477,14 @@ function amount(t){
   // portal left blank are no longer silently dropped by a value filter.
   return t.est_from_emd ? t.est_from_emd : null;
 }
+// Only what the portal itself published. Benchmarks and the price-position
+// claim must use this, never amount(): a figure we derived from the EMD is
+// a guess, and a guess can neither be judged "900% above typical" nor be
+// allowed to drag the median that judges everything else.
+function portalAmount(t){
+  const n = parseFloat(String(t.est_amount_raw||'').replace(/[^0-9.]/g,''));
+  return isNaN(n) ? null : n;
+}
 // Indian digit grouping: 1,92,500 not 192,500.
 function inr(n){
   const s = String(Math.round(n));
@@ -626,8 +634,11 @@ function tenderCard(t){
           : t.est_from_emd
             ? '<span class="est">~\u20b9' + inr(t.est_from_emd) +
               '<span class="esttag" title="The portal published no value. '
-              + 'This is derived from the EMD, which is set at 1% of the '
-              + 'tender value.">est.</span></span>'
+              + 'This is the EMD x 100, because the deposit is 1% of the '
+              + 'contract in 86% of the tenders that publish both. Where '
+              + 'the deposit is a flat sum instead -- rentals, licences, '
+              + 'round-lakh deposits -- we show no estimate at all.">'
+              + 'est.</span></span>'
             : money('')) + '</dd></div>' +
       '<div><dt>Deposit (EMD)</dt><dd>' + money(esc(t.emd)) +
         (t.bid_validity && /^\d+$/.test(String(t.bid_validity))
@@ -912,7 +923,7 @@ let BENCH = null;
 function buildBench(){
   const cells = {};
   DB.tenders.forEach(t => {
-    const v = amount(t);
+    const v = portalAmount(t);
     if (!v || !t.district) return;
     (t.work_list||[]).forEach(w => {
       const k = w + '|' + t.district;
@@ -927,7 +938,7 @@ function buildBench(){
 // Returns {label, pct, basis} or null when we have no comparable work.
 function pricePosition(t){
   if (!BENCH) buildBench();
-  const v = amount(t);
+  const v = portalAmount(t);
   if (!v || !t.district) return null;
   let best = null;
   (t.work_list||[]).forEach(w => {

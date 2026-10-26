@@ -210,12 +210,39 @@ def _money(raw) -> float | None:
         return None
 
 
+def _emd_is_not_one_percent(emd: float, t: dict) -> bool:
+    """
+    Cases where the EMD is a deposit, not 1% of a contract value.
+
+    Measured against the 6,355 tenders that publish BOTH a value and an EMD:
+    the 1% rule holds for 86% of them, but it fails badly for two groups, and
+    both are identifiable without knowing the value.
+
+      - A round lakh (n x 100,000). 96.5% of those are not 1% of anything;
+        at 5 lakh and above it was wrong in all 111 cases. These are flat
+        deposits set by a schedule, so EMD x 100 invents a figure 10 to 100
+        times the real one.
+      - Rentals, leases and licences. The deposit secures the premises, not
+        a contract value, so 78-93% break depending on how they are spotted.
+
+    Applying both takes the error rate of the estimates we publish from 6.2%
+    to 0.66%, catching 90% of the bad ones and withdrawing 4.5% of the good.
+    Blank beats wrong, the same rule used for districts.
+    """
+    if emd >= 100_000 and emd % 100_000 == 0:
+        return True
+    blob = f"{t.get('title') or ''} {t.get('work_categories') or ''}".lower()
+    return any(k in blob for k in ("rental", "rent ", "lease", "licen"))
+
+
 def _add_estimated_value(t: dict) -> None:
     """Fill est_from_emd when the portal published an EMD but no value."""
     if _money(t.get("est_amount_raw")):
         return
     emd = _money(t.get("emd"))
     if not emd or emd <= 0:
+        return
+    if _emd_is_not_one_percent(emd, t):
         return
     estimate = round(emd * 100.0 / EMD_PERCENT_OF_VALUE)
     if estimate > ESTIMATE_CEILING:
