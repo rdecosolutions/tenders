@@ -24,6 +24,9 @@ data/tenders.db directly (tenders + events tables) and never scrapes.
 from __future__ import annotations
 
 import argparse
+import json
+import pathlib
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -161,7 +164,46 @@ def run(headless: bool = True,
 
     conn.close()
     counts["notes"] = notes
+    if not dry_run:
+        _record_run(counts)
     return counts
+
+
+# A sweep once covered a fifth of the listing and reported success, and the
+# only trace was a line in a log nobody can read without admin rights. Each
+# run now leaves a row behind, so "did we actually see the whole state last
+# night?" is a number audit.py can answer instead of a guess.
+RUNS_NDJSON = pathlib.Path(__file__).resolve().parent.parent / "data" / "runs.ndjson"
+
+
+def _record_run(counts: dict) -> None:
+    walked = total = None
+    complete = True
+    for note in counts.get("notes", []):
+        m = re.search(r"after (\d+) pages(?: of (\d+))?", note)
+        if m:
+            walked = int(m.group(1))
+            total = int(m.group(2)) if m.group(2) else total
+        m = re.search(r"stopped after (\d+) pages \((\d+)% of (\d+) pages\)", note)
+        if m:
+            walked, total, complete = int(m.group(1)), int(m.group(3)), False
+    row = {
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "scanned": counts.get("scanned", 0),
+        "in_scope": counts.get("in_scope", 0),
+        "detail_fetched": counts.get("detail_fetched", 0),
+        "pages_walked": walked,
+        "pages_total": total,
+        "complete": complete,
+        "coverage_pct": (round(100.0 * walked / total, 1)
+                         if walked and total else (100.0 if complete else None)),
+    }
+    try:
+        RUNS_NDJSON.parent.mkdir(parents=True, exist_ok=True)
+        with RUNS_NDJSON.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except OSError:
+        pass            # never let bookkeeping fail a scrape
 
 
 def show_alerts(since_hours: int) -> None:

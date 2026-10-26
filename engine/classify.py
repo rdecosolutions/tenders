@@ -174,6 +174,7 @@ WORK_CATEGORIES = {
     ],
     "Roads (Paver Block)": [
         "paver block", "paver-block", "interlocking", "paving block",
+        "paverblock", "paverblocks", "paver blocks",
     ],
     "Road Furniture": [
         "speed breaker", "road marking", "guard stone", "street light",
@@ -188,6 +189,11 @@ WORK_CATEGORIES = {
         "gobardhan", "segregation shed", "waste to energy", "dumping yard",
         "transfer station", "baling machine", "bailing machine", "rrc",
         "resource recovery",
+        "balling machine", "baling machine",
+        # NOT "mcc": it means Micro Compost Centre at a waste site and Motor
+        # Control Centre at a pumping station, and we cannot tell which from
+        # the text. Blank beats wrong.
+        "bailing machine", "micro compost",
     ],
     # Municipal and panchayat greenery work is a steady category of its own:
     # parks, playgrounds, avenue planting, burial grounds, and the removal
@@ -221,6 +227,7 @@ WORK_CATEGORIES = {
         "building", "school building", "hostel building", "community hall",
         "office building", "panchayat building", "construction of building",
         "kitchen shed", "noon meal centre",
+        "classroom", "classrooms", "ms grill", "grill work",
     ],
     "Civil Works": [
         "civil work", "compound wall", "renovation", "repair", "repairs",
@@ -251,6 +258,7 @@ WORK_CATEGORIES = {
         "led fitting", "high mast", "hi mast", "himast", "mast light",
         "mini mast", "mini hi mast",
         "solar light", "solar panel", "solar street",
+        "street light", "street lights", "led street light", "led street lights", "streetlight", "streetlights",
     ],
     "Electrical Works": [
         "electrical maintenance", "electrical work", "electrical works",
@@ -329,10 +337,42 @@ def classify_department(title: str, org: str = "", tender_id: str = "") -> str:
     return "UNKNOWN"
 
 
+# "repair" counts as civil work, which is right for a compound wall and
+# wrong for a printer. Found by hand-judging a sample: toner refilling was
+# tagged Civil Works. Removing the keyword outright is worse -- 709 tenders
+# rest on it and most are genuine building repairs -- so it is only ignored
+# when the repair is plainly of equipment and nothing structural is named.
+CIVIL_ONLY_BY_REPAIR = ("repair", "repairs")
+# Keywords match whole words, so "motor" does not match "motors" -- the
+# existing lists carry plurals by hand ("repair", "repairs"). Generate them
+# here instead of maintaining two copies that can drift apart.
+NON_CIVIL_REPAIR_OBJECTS = [
+    "printer", "toner", "cartridge", "computer", "laptop", "photocopier",
+    "xerox", "software", "server", "cctv", "camera",
+    "motor", "pump", "panel board", "transformer", "generator", "genset",
+    "vehicle", "lorry", "tipper", "jcb", "tractor", "ambulance",
+    "furniture", "stationery", "machine",
+]
+NON_CIVIL_REPAIR_OBJECTS += [w + "s" for w in NON_CIVIL_REPAIR_OBJECTS
+                             if not w.endswith("s")]
+
+# Repairing a pump ROOM is building work even though "pump" is equipment.
+# These rescue the structure when both appear.
+STRUCTURAL_NOUNS = ["room", "building", "shed", "hall", "wall", "roof",
+                    "floor", "ceiling", "platform", "staircase", "tank"]
+STRUCTURAL_NOUNS += [w + "s" for w in STRUCTURAL_NOUNS]
+
+
 def classify_work(title: str, description: str = "") -> list[str]:
     """Return all matching work-category tags (possibly empty)."""
     text = f"{title} {description}".lower()
     tags = [cat for cat, needles in WORK_CATEGORIES.items() if _hit(text, needles)]
+
+    if "Civil Works" in tags:
+        structural = [k for k in WORK_CATEGORIES["Civil Works"]
+                      if k not in CIVIL_ONLY_BY_REPAIR] + STRUCTURAL_NOUNS
+        if not _hit(text, structural) and _hit(text, NON_CIVIL_REPAIR_OBJECTS):
+            tags.remove("Civil Works")
 
     # Temple-car specifics should suppress the generic 'Civil Works' noise
     # only if nothing else matched, keep behaviour simple and additive here.

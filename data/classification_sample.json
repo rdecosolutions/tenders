@@ -1,0 +1,20 @@
+{
+  "n": 40,
+  "correct_pct": 80,
+  "judged_on": "2026-10-26",
+  "judged_by": "Claude (Opus 5), reading title + portal work description",
+  "sample": "40 open tenders, random.seed(4242) over data/tenders.ndjson",
+  "breakdown": {
+    "fully_correct": 32,
+    "wrong_tag": 4,
+    "no_tag_where_one_applies": 4
+  },
+  "caveat": "This is the classifier judging measured by the model that wrote it, not an independent expert, and it is measured from the same text the classifier reads. Treat it as a floor on obvious errors, not as a certified accuracy. Two of the first judgements were themselves wrong -- tenders with generic titles like 'Revenue Fund 2026-27' were tagged from the work description, which is not visible in the title -- so the figure rose from 75% to 80% on checking.",
+  "predates_fixes": true,
+  "fixes_made_after": [
+    "'repair' no longer implies Civil Works when the object is equipment",
+    "Street Lighting / Roads (Paver Block) / Buildings keyword gaps closed",
+    "baling machine now Solid Waste Management"
+  ],
+  "note": "Accuracy has NOT been re-measured since those fixes. The next sample should use a different seed."
+}

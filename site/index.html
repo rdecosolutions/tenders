@@ -919,6 +919,7 @@ function clearAll(){
 // its district? The portal cannot answer that -- it deletes closed tenders,
 // so it has no history to compare against. We do. Benchmarks are built once
 // per load and cached.
+let QUALITY = null;
 let BENCH = null;
 function buildBench(){
   const cells = {};
@@ -1499,6 +1500,44 @@ function renderDash(){
       rows(others)));
   }
 
+  // --- how much of this can you trust
+  // Deliberately the plainest panel on the page. Every number here is
+  // measured against data we already hold, not asserted, and where we
+  // cannot measure something it says so instead of implying we can.
+  if (QUALITY){
+    const Q = QUALITY, er = Q.estimate_rule || {}, cl = Q.classification || {},
+          bm = Q.benchmarks || {}, sw = Q.sweep || {}, lg = Q.recall_lot_gaps || {};
+    const q = [];
+    if (er.published_error_pct != null)
+      q.push(['Estimated values', er.published_error_pct + '% wrong',
+        'checked against ' + (er.ground_truth_rows||0).toLocaleString() +
+        ' tenders that publish both a value and a deposit']);
+    q.push(['Department tagging', (cl.department_coverage_pct||0) + '% tagged',
+      cl.accuracy ? 'hand-judged ' + cl.accuracy.correct_pct + '% correct on ' +
+        cl.accuracy.n + ' sampled' : 'coverage only \u2014 accuracy not yet measured']);
+    q.push(['Work category', (cl.work_category_coverage_pct||0) + '% tagged',
+      'district ' + (cl.district_coverage_pct||0) + '% tagged']);
+    if (bm.open_tenders_we_can_price_check_pct != null)
+      q.push(['Price comparisons', bm.open_tenders_we_can_price_check_pct +
+        '% of open tenders', 'built from published values only, never our own estimates']);
+    if (sw.available && sw.last_run)
+      q.push(['Last full sweep', (sw.last_run.coverage_pct != null ?
+        sw.last_run.coverage_pct + '% of pages' : 'recorded'),
+        sw.incomplete_in_last_14 ? sw.incomplete_in_last_14 +
+          ' of the last 14 runs stopped early' : 'no early stops in 14 runs']);
+    if (lg.gap_rate_pct != null)
+      q.push(['Possible gaps', lg.gap_rate_pct + '% of packages',
+        'missing at least one lot \u2014 some close outside our 14-day window']);
+    P.push(panel('How much of this can you trust',
+      'We measure our own accuracy every night against tenders where the portal publishes the answer, and show it here whether it flatters us or not.',
+      '<table>' + q.map(r =>
+        '<tr><td>' + esc(r[0]) + '<br><span class="why">' + esc(r[2]) +
+        '</span></td><td class="n">' + esc(r[1]) + '</td></tr>').join('') +
+      '</table>' +
+      '<p class="why">Measured ' + esc((Q.generated||'').slice(0,10)) +
+      ' on ' + (Q.tenders_held||0).toLocaleString() + ' tenders held.</p>', true));
+  }
+
   // --- work that came back
   const again = out.filter(t => t.repeat_of);
   const samePrice = again.filter(t => t.repeat_of.same_price);
@@ -1636,6 +1675,10 @@ async function boot(){
   });
   DB = d;
   DB.byId = Object.fromEntries(d.tenders.map(t => [t.tender_id, t]));
+  // Our own accuracy, measured nightly. Optional: a missing or malformed
+  // quality.json must never stop the tenders loading.
+  try { QUALITY = await (await fetch('quality.json?v=' + Date.now())).json(); }
+  catch (err) { QUALITY = null; }
   DB.events.sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
 
   buildFilterOptions();

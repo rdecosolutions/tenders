@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 engine/export.py --restore
           python3 engine/export.py --dump
+          python3 engine/audit.py --write
         env:
           BUILD_ID: ${{ github.sha }}
 

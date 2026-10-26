@@ -55,6 +55,12 @@ jobs:
         if: failure()
         run: python3 engine/diagnose.py >> "$GITHUB_STEP_SUMMARY"
 
+      # Measure our own derived numbers against the ground truth we hold,
+      # and publish the result. A claim nobody checks is how almost every
+      # bug in this project started.
+      - name: Audit data quality
+        run: python3 engine/audit.py --write | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Write the data back out
         run: python3 engine/export.py --dump
         env:
@@ -69,7 +75,7 @@ jobs:
         run: |
           git config user.name  "tn-tender-bot"
           git config user.email "actions@github.com"
-          git add data/tenders.ndjson data/events.ndjson
+          git add data/tenders.ndjson data/events.ndjson data/runs.ndjson
           if git diff --staged --quiet; then
             echo "No change tonight - nothing to commit."
           else
