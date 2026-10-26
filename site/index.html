@@ -83,6 +83,9 @@
     background:var(--bg);border:1px solid var(--line);border-radius:5px;
     padding:3px 8px;margin:0 6px 5px 0}
   .docsz{color:var(--muted);font-size:11px}
+  .dockind{color:var(--muted);font-size:11px;font-style:italic}
+  .dochint{font-size:11.5px;color:var(--muted);margin:6px 0 0;
+    line-height:1.45}
   .lock{display:block;font-size:11px;color:var(--muted);margin-top:2px;
     cursor:help}
   .chart{width:100%;height:auto;margin:6px 0 2px;display:block}
@@ -652,13 +655,21 @@ function tenderCard(t){
         ? '<div style="grid-column:1/-1"><dt>Description</dt><dd>' +
           esc(t.work_description) + '</dd></div>' : '') +
       (t.documents
-        ? '<div style="grid-column:1/-1"><dt>Documents to download</dt><dd>' +
+        ? '<div style="grid-column:1/-1"><dt>Documents on the portal</dt><dd>' +
           t.documents.split(';').filter(Boolean).map(d => {
             const [name, kb] = d.split('|');
             const size = +kb >= 1024 ? (kb/1024).toFixed(1) + ' MB' : kb + ' KB';
+            const kind = docKind(name);
             return '<span class="doc">' + esc(name) +
+                   (kind ? '<span class="dockind">' + kind + '</span>' : '') +
                    '<span class="docsz">' + size + '</span></span>';
-          }).join('') + '</dd></div>' : '') +
+          }).join('') +
+          '<p class="dochint">We cannot link straight to these. The portal\'s ' +
+          'download page carries no tender number \u2014 it only serves ' +
+          'whatever tender your own session is on \u2014 and it asks for a ' +
+          'captcha. Use <b>Copy ID &amp; find on portal</b> below, then open ' +
+          '<b>Tender Documents</b> on the tender\'s page.</p>' +
+          '</dd></div>' : '') +
       (t.eligibility ? '<div style="grid-column:1/-1"><dt>Who can bid</dt><dd>' +
         esc(t.eligibility) + '</dd></div>' : '') +
     '</dl>' +
@@ -674,6 +685,21 @@ function tenderCard(t){
       'Paste into the <b>Tender ID</b> box, type the captcha, press ' +
       '<b>Search</b>.</p>' +
   '</article>';
+}
+
+// What each attached file actually is. The list is the useful part -- it
+// tells you whether there is a priced BOQ to fill in, and whether the
+// notice is two pages or eighty -- so name the type in plain words rather
+// than leaving a bare filename.
+function docKind(name){
+  const n = (name || '').toLowerCase();
+  if (n.startsWith('boq')) return 'the priced list you fill in';
+  if (n.startsWith('nit') || n.includes('tendernotice')) return 'the notice';
+  if (n.includes('tendercondition') || n.includes('condition')) return 'terms';
+  if (n.includes('technicalbid')) return 'technical bid form';
+  if (n.includes('scope')) return 'scope of work';
+  if (n.includes('drawing') || n.includes('plan')) return 'drawings';
+  return '';
 }
 
 const BADGE = {NEW:'new', CORRIGENDUM:'corrected', RETENDER:'retendered',
