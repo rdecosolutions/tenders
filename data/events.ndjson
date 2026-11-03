@@ -16193,3 +16193,10 @@
 {"created_at": "2026-11-03T03:49:22.584895+00:00", "detail": "closing date: 02-Nov-2026 03:00 PM -> 04-Nov-2026 03:00 PM", "event_type": "CORRIGENDUM", "id": 16361, "tender_id": "2026_RDTN_709511_1"}
 {"created_at": "2026-11-03T03:52:11.903598+00:00", "detail": "Marakkanam Town Panchayat - 6th SFC - 2026-27 - Azhagankuppam Anganwadi", "event_type": "NEW", "id": 16362, "tender_id": "2026_DTP_720627_1"}
 {"created_at": "2026-11-03T03:52:26.797892+00:00", "detail": "closing date: 27-Oct-2026 03:00 PM -> 03-Nov-2026 03:00 PM", "event_type": "CORRIGENDUM", "id": 16363, "tender_id": "2026_RDTN_709664_1"}
+{"created_at": "2026-11-03T04:41:42.701239+00:00", "detail": "Repair to Anganwadi Building PUF Panel Roofing in Paithampadi Panchayat", "event_type": "NEW", "id": 16364, "tender_id": "2026_RDTN_721112_18"}
+{"created_at": "2026-11-03T04:41:52.021483+00:00", "detail": "Repair to Anganwadi Building PUF Panel Roofing in Korathi Panchayat", "event_type": "NEW", "id": 16365, "tender_id": "2026_RDTN_721112_17"}
+{"created_at": "2026-11-03T04:41:56.673380+00:00", "detail": "Repair to Anganwadi Building PUF Panel Roofing in Chinnapettai Panchayat", "event_type": "NEW", "id": 16366, "tender_id": "2026_RDTN_721112_16"}
+{"created_at": "2026-11-03T04:42:01.314191+00:00", "detail": "Repairs to Anganwadi Building at P.N.Palayam Panchayat", "event_type": "NEW", "id": 16367, "tender_id": "2026_RDTN_721112_10"}
+{"created_at": "2026-11-03T04:42:10.487188+00:00", "detail": "Renovation of Anganwadi Building at Indra Nagar in Sundaravandi Panchayat", "event_type": "NEW", "id": 16368, "tender_id": "2026_RDTN_721112_15"}
+{"created_at": "2026-11-03T04:42:15.205203+00:00", "detail": "Repair to Anganwadi Building at Chathiram in Paithampadi Panchayat", "event_type": "NEW", "id": 16369, "tender_id": "2026_RDTN_721112_11"}
+{"created_at": "2026-11-03T04:42:24.392326+00:00", "detail": "Repairs to Anganwadi Building at Kandarakottai Colony in Kandarakottai Panchayat", "event_type": "NEW", "id": 16370, "tender_id": "2026_RDTN_721112_2"}
