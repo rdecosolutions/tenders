@@ -16617,3 +16617,4 @@
 {"created_at": "2026-11-07T15:48:46.709536+00:00", "detail": "RELAYING 21 NOS OF INTERIOR BT ROADS IN ZONE-8", "event_type": "NEW", "id": 16785, "tender_id": "2026_CoC_724219_1"}
 {"created_at": "2026-11-07T15:49:31.311699+00:00", "detail": "RELAYING 23 NOS OF INTERIOR BT ROADS IN ZONE-8", "event_type": "NEW", "id": 16786, "tender_id": "2026_CoC_724217_1"}
 {"created_at": "2026-11-07T23:17:37.512403+00:00", "detail": "RELAYING 18 NOS OF INTERIOR BT ROADS IN ZONE-8", "event_type": "NEW", "id": 16787, "tender_id": "2026_CoC_724223_1"}
+{"created_at": "2026-11-08T02:37:11.847234+00:00", "detail": "Providing Cement Concrete Road at Ward No.01, Modakurichiyanur Road,Kamarajar Salai (Thangamal Colony), Ward No.02, Kamarajar Salai , Ward No.03, MGR Street ,Ward No.04, ,Kamarajar Salai Cross 04, Mavilaku mariamman kovil Street ,Ward No.06, Dr Ambe", "event_type": "NEW", "id": 16788, "tender_id": "2026_DTP_724212_1"}
