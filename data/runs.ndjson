@@ -9,3 +9,4 @@
 {"at": "2026-11-15T03:21:09+00:00", "scanned": 6836, "in_scope": 3504, "detail_fetched": 1475, "pages_walked": 684, "pages_total": 683, "complete": true, "coverage_pct": 100.1}
 {"at": "2026-11-16T02:16:44+00:00", "scanned": 6832, "in_scope": 3456, "detail_fetched": 551, "pages_walked": 684, "pages_total": 683, "complete": true, "coverage_pct": 100.1}
 {"at": "2026-11-17T05:03:15+00:00", "scanned": 6725, "in_scope": 3585, "detail_fetched": 615, "pages_walked": 673, "pages_total": 672, "complete": true, "coverage_pct": 100.1}
+{"at": "2026-11-18T04:02:30+00:00", "scanned": 6600, "in_scope": 3517, "detail_fetched": 343, "pages_walked": 660, "pages_total": 659, "complete": true, "coverage_pct": 100.2}
