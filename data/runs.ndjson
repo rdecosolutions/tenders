@@ -11,3 +11,4 @@
 {"at": "2026-11-17T05:03:15+00:00", "scanned": 6725, "in_scope": 3585, "detail_fetched": 615, "pages_walked": 673, "pages_total": 672, "complete": true, "coverage_pct": 100.1}
 {"at": "2026-11-18T04:02:30+00:00", "scanned": 6600, "in_scope": 3517, "detail_fetched": 343, "pages_walked": 660, "pages_total": 659, "complete": true, "coverage_pct": 100.2}
 {"at": "2026-11-19T03:43:44+00:00", "scanned": 6437, "in_scope": 3250, "detail_fetched": 419, "pages_walked": 644, "pages_total": 643, "complete": true, "coverage_pct": 100.2}
+{"at": "2026-11-21T03:43:40+00:00", "scanned": 6181, "in_scope": 3141, "detail_fetched": 704, "pages_walked": 619, "pages_total": 618, "complete": true, "coverage_pct": 100.2}
